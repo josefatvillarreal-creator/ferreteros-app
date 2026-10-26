@@ -10,7 +10,8 @@ import { csrfProtection } from "./csrf.js";
 import { requireAuth } from "./auth.js";
 import { checkSheetsConnection } from "./sheets.js";
 import authRoutes from "./routes/auth.js";
-import storeRoutes from "./routes/stores.js";
+import sucursalRoutes from "./routes/sucursales.js";
+import productoRoutes from "./routes/productos.js";
 import visitRoutes from "./routes/visits.js";
 import feedbackRoutes from "./routes/feedback.js";
 import managerRoutes from "./routes/manager.js";
@@ -61,7 +62,8 @@ app.use(csrfProtection);
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 app.use("/api", authRoutes); // expone /api/login, /api/auth/session, /api/auth/logout
-app.use("/api/sucursales", storeRoutes); // GET /api/sucursales?lat&lng (tiendas cercanas)
+app.use("/api/sucursales", sucursalRoutes); // GET /api/sucursales?lat&lng (sucursales cercanas)
+app.use("/api/productos", productoRoutes); // GET /api/productos (catálogo activo)
 app.use("/api/visits", visitRoutes);
 app.use("/api/feedback", feedbackRoutes); // POST /api/feedback (retroalimentación)
 app.use("/api/manager", managerRoutes); // GET /api/manager/summary (gerente/admin)
@@ -104,7 +106,7 @@ app.use((err, req, res, next) => {
 initDb().finally(() => {
   app.listen(config.port, () => {
     console.log(
-      `Backend Promotores en http://localhost:${config.port} (auth: ID + contraseña bcrypt${serveStatic ? "; sirviendo frontend estático" : ""})`
+      `Backend Ferreteros APP en http://localhost:${config.port} (auth: ID + contraseña bcrypt${serveStatic ? "; sirviendo frontend estático" : ""})`
     );
   });
 });

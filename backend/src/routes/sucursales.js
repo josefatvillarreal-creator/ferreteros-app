@@ -1,10 +1,10 @@
 // ---------------------------------------------------------------------------
-// Tiendas cercanas — GET /api/sucursales?lat=&lng=
+// Sucursales cercanas — GET /api/sucursales?lat=&lng=
 // ---------------------------------------------------------------------------
 // El frontend envía su ubicación GPS real. El SERVIDOR calcula la distancia
-// (Haversine) desde cada tienda del catálogo global y devuelve solo las que
+// (Haversine) desde cada sucursal del catálogo global y devuelve solo las que
 // están dentro de `nearbyRadiusMeters` (2 km por defecto), ordenadas por
-// cercanía. No hay asignación fija de tiendas por promotor.
+// cercanía. No hay asignación fija de sucursales por promotor.
 import { Router } from "express";
 import { requireAuth } from "../auth.js";
 import { config } from "../config.js";
@@ -27,20 +27,20 @@ router.get("/", async (req, res) => {
     ? Math.min(Math.max(requested, 0), config.nearbyRadiusMeters)
     : config.nearbyRadiusMeters;
 
-  const stores = await getAllSucursales();
-  const nearby = stores
+  const sucursales = await getAllSucursales();
+  const nearby = sucursales
     .map((s) => ({ ...s, distance: Math.round(distanceMeters(lat, lng, s.lat, s.lng)) }))
     .filter((s) => s.distance <= radius)
     .sort((a, b) => a.distance - b.distance);
 
-  return res.json({ radius, stores: nearby });
+  return res.json({ radius, sucursales: nearby });
 });
 
-// GET /api/sucursales/all -> TODAS las tiendas del catálogo (para pintarlas en el
-// mapa de Inicio, sin filtro de distancia).
+// GET /api/sucursales/all -> TODAS las sucursales del catálogo (para pintarlas
+// en el mapa de Inicio, sin filtro de distancia).
 router.get("/all", async (req, res) => {
-  const stores = await getAllSucursales();
-  return res.json({ stores });
+  const sucursales = await getAllSucursales();
+  return res.json({ sucursales });
 });
 
 export default router;

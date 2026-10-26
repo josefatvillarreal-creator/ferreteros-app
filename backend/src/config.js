@@ -16,14 +16,10 @@ export const config = {
   // (lee el promotor + su hash bcrypt directamente del Google Sheet).
   authSource: (process.env.AUTH_SOURCE ?? "db").toLowerCase(),
 
-  // Origen del catálogo de tiendas: "db" (Prisma) o "sheet" (sincroniza la
-  // pestaña Tiendas del Sheet hacia la base local).
-  storesSource: (process.env.STORES_SOURCE ?? "db").toLowerCase(),
-
-  // Origen de las VISITAS para el resumen del gerente: "db" (Prisma, la fuente
-  // real en producción) o "sheet" (lee la pestaña de auditoría de check-out,
-  // útil en desarrollo local donde la base local no tiene la actividad real).
-  visitsSource: (process.env.VISITS_SOURCE ?? "db").toLowerCase(),
+  // Origen del catálogo (clientes, sucursales y productos): "db" (Prisma) o
+  // "sheet" (sincroniza las pestañas Clientes, Sucursales y Productos del Sheet
+  // hacia la base local, ver catalogSync.js).
+  catalogSource: (process.env.CATALOG_SOURCE ?? "db").toLowerCase(),
 
   session: {
     secret: required("SESSION_SECRET", "insecure-dev-secret"),
@@ -37,18 +33,8 @@ export const config = {
   // si se supera. Requisito Protexa: 100 m con GPS real.
   rangeMeters: Number(process.env.CHECK_IN_RADIUS_METERS ?? 100),
 
-  // Radio (m) para listar tiendas cercanas en GET /api/sucursales?lat&lng.
+  // Radio (m) para listar sucursales cercanas en GET /api/sucursales?lat&lng.
   nearbyRadiusMeters: Number(process.env.NEARBY_RADIUS_METERS ?? 2000),
-
-  // --- Precios de venta (para el resumen del gerente) ----------------------
-  // El check-out solo captura CANTIDADES (rollos y cubetas). Para mostrar el
-  // "dinero vendido" en la pantalla del gerente, multiplicamos cada cantidad por
-  // su precio unitario. Se definen por variable de entorno para poder ajustarlos
-  // sin tocar código. Si quedan en 0, el dashboard muestra $0 (recuerda ponerlos).
-  prices: {
-    rollo: Number(process.env.PRECIO_ROLLO ?? 0),
-    cubeta: Number(process.env.PRECIO_CUBETA ?? 0),
-  },
 
   // --- Google Sheets (solo para el administrador) --------------------------
   // Al hacer check-out, el backend agrega una fila con los datos de la visita.
@@ -66,14 +52,17 @@ export const config = {
     feedbackTab: process.env.GOOGLE_SHEETS_FEEDBACK_TAB ?? "Retroalimentacion",
     // Pestaña de promotores (usada cuando AUTH_SOURCE=sheet).
     promotersTab: process.env.GOOGLE_SHEETS_PROMOTERS_TAB ?? "Promotores",
-    // Pestaña de tiendas (usada cuando STORES_SOURCE=sheet).
-    tiendasTab: process.env.GOOGLE_SHEETS_TIENDAS_TAB ?? "Tiendas",
+    // Catálogo (usado cuando CATALOG_SOURCE=sheet): clientes, sucursales y
+    // productos (cada producto con su equivalencia para la meta y su precio).
+    clientesTab: process.env.GOOGLE_SHEETS_CLIENTES_TAB ?? "Clientes",
+    sucursalesTab: process.env.GOOGLE_SHEETS_SUCURSALES_TAB ?? "Sucursales",
+    productosTab: process.env.GOOGLE_SHEETS_PRODUCTOS_TAB ?? "Productos",
     // Pestaña de usuarios administrativos (admin/gerente), separada de los
     // promotores. Login de gerentes/admin se valida contra esta pestaña.
     usuariosTab: process.env.GOOGLE_SHEETS_USUARIOS_TAB ?? "Usuarios",
-    // Pestaña de auditoría de check-out (usada cuando VISITS_SOURCE=sheet).
+    // Pestaña de auditoría de cada check-in/check-out.
     actividadTab: process.env.GOOGLE_SHEETS_ACTIVIDAD_TAB ?? "Actividad Diaria",
-    // Metas de venta mensuales (por promotor y por tienda, en unidades).
+    // Metas semanales (por promotor y por sucursal, en unidades-equivalentes).
     metasTab: process.env.GOOGLE_SHEETS_METAS_TAB ?? "Metas",
     // Notificaciones (check-in, meta alcanzada) para supervisores/admin.
     notificacionesTab: process.env.GOOGLE_SHEETS_NOTIFICACIONES_TAB ?? "Notificaciones",

@@ -7,7 +7,7 @@
 import { prisma, withWriteRetry } from "./prisma.js";
 import { config } from "./config.js";
 import { findPromoterInSheet, getAllPromotersFromSheet } from "./promotersSheet.js";
-import { ensureStoresSynced } from "./storesSheet.js";
+import { ensureCatalogSynced } from "./catalogSync.js";
 import { summarizeVisitRows } from "./managerSummary.js";
 import { fetchVisitRowsFromSheet } from "./activitySheet.js";
 import { todayKey, resolveRange, formatMexicoDateTime, dayKeyOf, timeZoneForEstado } from "./businessDay.js";
@@ -29,21 +29,43 @@ export async function findPromoterById(promoterId) {
   return prisma.promoter.findUnique({ where: { id: promoterId } });
 }
 
-// --- Tiendas (catálogo global) --------------------------------------------
+// --- Catálogo: sucursales (de un cliente) y productos --------------------------
 
-// Todas las tiendas del catálogo. El filtrado por cercanía se hace en la ruta.
-// Con STORES_SOURCE=sheet, primero sincroniza desde la pestaña Tiendas del Sheet.
+// Aplana una sucursal con el nombre de su cliente.
+function flattenSucursal({ cliente, ...s }) {
+  return { ...s, clienteNombre: cliente?.nombre ?? s.clienteId };
+}
+
+// Todas las sucursales del catálogo. El filtrado por cercanía se hace en la ruta.
+// Con CATALOG_SOURCE=sheet, primero sincroniza desde las pestañas del Sheet.
 export async function getAllSucursales() {
-  if (config.storesSource === "sheet") await ensureStoresSynced();
-  return prisma.store.findMany({
-    orderBy: { id: "asc" },
-    select: { id: true, name: true, address: true, lat: true, lng: true },
-  });
+  if (config.catalogSource === "sheet") await ensureCatalogSynced();
+  const rows = await prisma.sucursal.findMany({ orderBy: { id: "asc" }, include: { cliente: true } });
+  return rows.map(flattenSucursal);
 }
 
 export async function getSucursal(sucursalId) {
-  if (config.storesSource === "sheet") await ensureStoresSynced();
-  return prisma.store.findUnique({ where: { id: sucursalId } });
+  if (config.catalogSource === "sheet") await ensureCatalogSynced();
+  const row = await prisma.sucursal.findUnique({ where: { id: sucursalId }, include: { cliente: true } });
+  return row ? flattenSucursal(row) : null;
+}
+
+// Productos que el promotor puede capturar en un check-out (solo activos).
+export async function getProductosActivos() {
+  if (config.catalogSource === "sheet") await ensureCatalogSynced();
+  return prisma.producto.findMany({
+    where: { activo: true },
+    orderBy: [{ orden: "asc" }, { id: "asc" }],
+    select: { id: true, nombre: true, unidad: true, orden: true },
+  });
+}
+
+// TODOS los productos (activos o no) con su equivalencia y precio: las ventas
+// históricas de un producto desactivado siguen sumando en metas y tableros.
+// Map<productoId, { equivalencia, precio }> para unitsOf/moneyOf (units.js).
+export async function getCatalogoProductos() {
+  const rows = await prisma.producto.findMany({ select: { id: true, equivalencia: true, precio: true } });
+  return new Map(rows.map((p) => [p.id, { equivalencia: p.equivalencia, precio: p.precio }]));
 }
 
 // --- Visitas ---------------------------------------------------------------
@@ -218,7 +240,7 @@ export async function getCompetitionReportPhotos(reportId, { supervisorId } = {}
 // reutiliza exactamente la misma agregación que el del gerente.
 export async function getManagerSummary(rangeKey = "today", { supervisorId, from, to } = {}) {
   // Asegura que las tiendas (con su ESTADO) estén sincronizadas desde el Sheet.
-  if (config.storesSource === "sheet") await ensureStoresSynced();
+  if (config.catalogSource === "sheet") await ensureCatalogSynced();
 
   const range = resolveRange(rangeKey, { from, to });
 
