@@ -20,6 +20,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { google } from "googleapis";
 import { config } from "./config.js";
+import { findDevUser, listDevSupervisors } from "./devUsers.js";
 
 const SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"];
 const TTL_MS = Number(process.env.USERS_CACHE_TTL_MS ?? 5 * 60 * 1000);
@@ -105,7 +106,8 @@ async function ensureCache() {
 // existe o hay un problema de credenciales, se comporta como "usuario no
 // encontrado" para que el login continúe con el flujo de promotores.
 export async function findUserInSheet(userId) {
-  if (!isConfigured()) return null;
+  // Sin Sheet (desarrollo local): usuarios de DEV_USERS (ver devUsers.js).
+  if (!isConfigured()) return findDevUser(userId);
   try {
     const { byId } = await ensureCache();
     return byId.get(String(userId).trim()) ?? null;
@@ -120,7 +122,7 @@ export async function findUserInSheet(userId) {
 // Todos los usuarios con rol "supervisor" — lo usa el reporte semanal para
 // generarle uno a cada supervisor (uno por uno, con SU equipo).
 export async function getAllSupervisorsFromSheet() {
-  if (!isConfigured()) return [];
+  if (!isConfigured()) return listDevSupervisors();
   try {
     const { byId } = await ensureCache();
     return [...byId.values()].filter((u) => u.role === "supervisor");
