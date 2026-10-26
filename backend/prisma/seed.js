@@ -86,11 +86,23 @@ async function main() {
     promoterCount++;
   }
 
-  const clientes = parseClientes(readRows("Clientes.csv"));
+  // Un CSV ausente o sin encabezado NO debe tumbar el arranque (con
+  // CATALOG_SOURCE=sheet el catálogo viene del Sheet y estos CSV ni existen):
+  // se omite y se reporta, igual que hace syncCatalog.
+  const safe = (tab, parse) => {
+    try {
+      return parse();
+    } catch (e) {
+      skipped.push(`${tab}: ${e.message}`);
+      return { items: [], skipped: [] };
+    }
+  };
+  const clientes = safe("Clientes", () => parseClientes(readRows("Clientes.csv")));
   for (const c of clientes.items) await prisma.cliente.upsert({ where: { id: c.id }, update: c, create: c });
-  const productos = parseProductos(readRows("Productos.csv"));
+  const productos = safe("Productos", () => parseProductos(readRows("Productos.csv")));
   for (const p of productos.items) await prisma.producto.upsert({ where: { id: p.id }, update: p, create: p });
-  const sucursales = parseSucursales(readRows("Sucursales.csv"), new Set(clientes.items.map((c) => c.id)));
+  const clienteIds = new Set((await prisma.cliente.findMany({ select: { id: true } })).map((c) => c.id));
+  const sucursales = safe("Sucursales", () => parseSucursales(readRows("Sucursales.csv"), clienteIds));
   for (const s of sucursales.items) await prisma.sucursal.upsert({ where: { id: s.id }, update: s, create: s });
 
   for (const [tab, r] of [["Clientes", clientes], ["Productos", productos], ["Sucursales", sucursales]]) {
