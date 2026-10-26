@@ -107,18 +107,21 @@ export const api = {
   // NOTE: check-in ahora recibe { coords, photo } — la foto (Base64) es
   // obligatoria y viaja cifrada en la cola si se genera sin red.
 
-  // Who am I? Returns the current promoter (sin tiendas — ver nearbySucursales).
+  // Who am I? Returns the current promoter (sin sucursales — ver nearbySucursales).
   session: (signal) => request("/auth/session", { signal }),
 
   logout: () => request("/auth/logout", { method: "POST" }),
 
-  // Tiendas cercanas a la ubicación GPS del promotor (Haversine en el servidor,
-  // radio ~2 km). Devuelve { radius, stores: [{...store, distance}] }.
+  // Sucursales cercanas a la ubicación GPS del promotor (Haversine en el servidor,
+  // radio ~2 km). Devuelve { radius, sucursales: [{ ...sucursal, clienteNombre, distance }] }.
   nearbySucursales: (lat, lng, signal) =>
     request(`/sucursales?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`, { signal }),
 
-  // Todas las tiendas del catálogo (para pintarlas en el mapa de Inicio).
+  // Todas las sucursales del catálogo (para pintarlas en el mapa de Inicio).
   allSucursales: (signal) => request("/sucursales/all", { signal }),
+
+  // Productos ACTIVOS del catálogo: { productos: [{ id, nombre, unidad, orden }] }.
+  productos: (signal) => request("/productos", { signal }),
 
   // --- Visits (server-authoritative) -------------------------------------
   // The client sends its coordinates, but the SERVER re-validates distance,
@@ -129,18 +132,19 @@ export const api = {
       body: { coords, photo },
     }),
 
-  checkOut: (sucursalId, { coords, rollos, cubetas }) =>
+  // items = [{ productoId, cantidad }] — solo los productos con cantidad > 0.
+  checkOut: (sucursalId, { coords, items }) =>
     request(`/visits/${encodeURIComponent(sucursalId)}/check-out`, {
       method: "POST",
-      body: { coords, rollos, cubetas },
+      body: { coords, items },
     }),
 
   // Today's visit records for the signed-in promoter.
   visitsToday: (signal) => request("/visits/today", { signal }),
 
-  // Confirma "sigo en tienda" (alerta aleatoria 10am-4pm): responde Sí/No y,
+  // Confirma "sigo en la sucursal" (alerta aleatoria 10am-4pm): responde Sí/No y,
   // si se pudo tomar, la ubicación GPS del momento. Requiere que el promotor
-  // tenga un check-in abierto en esa tienda.
+  // tenga un check-in abierto en esa sucursal.
   confirmPresence: (sucursalId, { coords, sigueEnTienda }) =>
     request(`/visits/${encodeURIComponent(sucursalId)}/confirm-presence`, {
       method: "POST",

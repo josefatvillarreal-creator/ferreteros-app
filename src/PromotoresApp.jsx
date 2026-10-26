@@ -174,9 +174,9 @@ function Radar({ distance, inRange, gpsError, hasFix }) {
 
 // ---------------------------------------------------------------------------
 // Mapa (Leaflet empaquetado con la app; teselas con respaldo en lib/mapTiles.js).
-// Muestra la ubicación real del promotor y, opcionalmente, las tiendas cercanas.
+// Muestra la ubicación real del promotor y, opcionalmente, las sucursales cercanas.
 // ---------------------------------------------------------------------------
-function MapView({ coords, stores = [] }) {
+function MapView({ coords, sucursales = [] }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
   const userRef = useRef(null);
@@ -221,22 +221,22 @@ function MapView({ coords, stores = [] }) {
     setTimeout(() => mapRef.current && mapRef.current.invalidateSize(), 150);
   }, [L, coords, retryKey]);
 
-  // Marcadores de las tiendas cercanas.
+  // Marcadores de las sucursales.
   useEffect(() => {
     if (!L || !mapRef.current) return;
     mapRef.current.__stores = mapRef.current.__stores || L.layerGroup().addTo(mapRef.current);
     const layer = mapRef.current.__stores;
     layer.clearLayers();
-    // Todas las tiendas del catálogo son Home Depot: marcador de círculo naranja
-    // (#F96302) con ícono de casa. El tooltip muestra "Nombre - Número".
+    // Marcador de cada sucursal: círculo naranja (#F96302) con ícono de casa. El
+    // tooltip muestra "Cliente – Sucursal (Num)".
     const hdHtml = `<div style="width:26px;height:26px;border-radius:50%;background:#F96302;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.8V20h14V9.8"/></svg></div>`;
-    for (const s of stores) {
+    for (const s of sucursales) {
       if (typeof s.lat !== "number" || typeof s.lng !== "number") continue;
       const icon = L.divIcon({ className: "", html: hdHtml, iconSize: [26, 26], iconAnchor: [13, 13] });
-      const label = s.id ? `${s.name} - ${s.id}` : s.name;
+      const label = `${s.clienteNombre ? `${s.clienteNombre} – ` : ""}${s.name}${s.id ? ` (${s.id})` : ""}`;
       L.marker([s.lat, s.lng], { icon }).bindTooltip(label, { direction: "top" }).addTo(layer);
     }
-  }, [L, stores, retryKey]);
+  }, [L, sucursales, retryKey]);
 
   // Fallback si el mapa no cargó (sin red, o ningún proveedor de teselas
   // respondió): muestra las coordenadas en texto en lugar de un recuadro vacío.
@@ -355,7 +355,7 @@ function GoalBar({ label, actual, meta }) {
 
 // Barra de meta de ventas con gamificación (nivel + mensaje motivacional).
 // `goal` viene de GET /api/visits/my-goal: { target, achieved, reached }
-// (unidades-equivalentes: rollos + cubetas ponderadas, ACUMULADAS EN LA
+// (unidades-equivalentes: cada producto pesa según su equivalencia, ACUMULADAS EN LA
 // SEMANA — los galones no cuentan hacia la meta; personalizada o el default
 // de 30) o `null` mientras todavía no llega la respuesta del servidor.
 function SalesGoals({ goal }) {
@@ -384,7 +384,7 @@ function SalesGoals({ goal }) {
             <Trophy size={12} /> {level}
           </span>
         </div>
-        <GoalBar label="Rollos + cubetas" actual={goal.achieved} meta={goal.target} />
+        <GoalBar label="Unidades equivalentes" actual={goal.achieved} meta={goal.target} />
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: COLORS.successSoft, border: `1px solid ${COLORS.success}55`, borderRadius: 12, padding: "10px 12px", marginBottom: 14 }}>
         <Zap size={16} color={COLORS.success} style={{ flexShrink: 0, marginTop: 1 }} />
@@ -463,7 +463,7 @@ export default function PromotoresApp() {
   const [screen, setScreen] = useState("dashboard");
   const [records, setRecords] = useState({});
   const [myGoal, setMyGoal] = useState(null); // { target, achieved, reached } | null
-  const [myHistory, setMyHistory] = useState(null); // perfil completo (tiendas frecuentes, foto) | null
+  const [myHistory, setMyHistory] = useState(null); // perfil completo (sucursales frecuentes, foto) | null
 
   // Mi historial de check-in/check-out (pantalla aparte, ver screen ===
   // "historial") — paginado POR DÍA, 7 días por default. Antes vivía dentro
@@ -473,16 +473,16 @@ export default function PromotoresApp() {
   const [historyData, setHistoryData] = useState(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
-  const [selectedStore, setSelectedStore] = useState(null);
+  const [selectedSucursal, setSelectedSucursal] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  // Tiendas cercanas (por GPS). No hay asignación fija por promotor.
-  const [nearbySucursales, setNearbyStores] = useState([]);
-  const [allSucursales, setAllStores] = useState([]); // catálogo completo (para el mapa)
+  // Sucursales cercanas (por GPS). No hay asignación fija por promotor.
+  const [nearbySucursales, setNearbySucursales] = useState([]);
+  const [allSucursales, setAllSucursales] = useState([]); // catálogo completo (para el mapa)
   const [nearbyRadius, setNearbyRadius] = useState(2000); // m; lo confirma el server
   const [dashCoords, setDashCoords] = useState(null);
-  const [storesLoading, setStoresLoading] = useState(false);
-  const [storesError, setStoresError] = useState(null);
+  const [sucursalesLoading, setSucursalesLoading] = useState(false);
+  const [sucursalesError, setSucursalesError] = useState(null);
 
   // Formulario de login (ID de promotor + contraseña).
   const [promoterId, setPromoterId] = useState("");
@@ -516,8 +516,8 @@ export default function PromotoresApp() {
   const compCaptureRef = useRef(null); // cámara del sistema (respaldo si no abre la integrada)
   const [cameraFor, setCameraFor] = useState(null); // cámara integrada abierta: "visit" | "competition" | null
   const MAX_COMP_FOTOS = 5;
-  const [rollos, setRollos] = useState(0);
-  const [cubetas, setCubetas] = useState(0);
+  const [productos, setProductos] = useState([]); // catálogo activo [{ id, nombre, unidad, orden }]
+  const [cantidades, setCantidades] = useState({}); // { [productoId]: cantidad } del check-out en curso
   const [photo, setPhoto] = useState(null); // foto de check-in (Base64), obligatoria
   const [photoBusy, setPhotoBusy] = useState(false);
   const fileInputRef = useRef(null);
@@ -528,17 +528,17 @@ export default function PromotoresApp() {
   const [pending, setPending] = useState(0);
   const [syncing, setSyncing] = useState(false);
 
-  const stores = nearbySucursales;
-  const store = selectedStore;
-  const record = store ? records[store.id] : null;
+  const sucursales = nearbySucursales;
+  const sucursal = selectedSucursal;
+  const record = sucursal ? records[sucursal.id] : null;
 
-  // Recordatorio: sigue "en tienda" (check-in sin check-out) y ya es tarde.
+  // Recordatorio: sigue "en la sucursal" (check-in sin check-out) y ya es tarde.
   // Solo un aviso visual al abrir el dashboard — no hay push real todavía.
   const openVisit = Object.values(records).find((r) => r?.status === "checked-in");
-  const openVisitStore = openVisit ? allSucursales.find((s) => s.id === openVisit.sucursalId) : null;
+  const openVisitSucursal = openVisit ? allSucursales.find((s) => s.id === openVisit.sucursalId) : null;
   const showCheckoutReminder = Boolean(openVisit) && new Date().getHours() >= 19;
 
-  // Confirmación "sigo en tienda": una vez al día, en un momento aleatorio
+  // Confirmación "sigo en la sucursal": una vez al día, en un momento aleatorio
   // entre 10am y 4pm (hora del dispositivo), mientras tenga un check-in
   // abierto. El momento se calcula con una semilla (ID + día) para que sea el
   // mismo durante todo el día aunque recargue la app, sin backend nuevo para
@@ -600,7 +600,7 @@ export default function PromotoresApp() {
   }
 
   // Se muestra en las 4 pantallas donde también vive FeedbackModal (dashboard,
-  // detalle de tienda, competencia, perfil) — es una alerta que debe alcanzar
+  // detalle de sucursal, competencia, perfil) — es una alerta que debe alcanzar
   // al promotor sin importar en qué pantalla esté.
   const presenceModalNode = presenceModalOpen && (
     <div style={{ position: "fixed", inset: 0, background: "rgba(5,8,12,0.6)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
@@ -608,9 +608,9 @@ export default function PromotoresApp() {
         <div style={{ width: 52, height: 52, borderRadius: "50%", background: COLORS.accentSoft, color: COLORS.accentText, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
           <Heart size={24} />
         </div>
-        <h3 style={{ fontFamily: "Space Grotesk", fontSize: 17, fontWeight: 600, color: COLORS.text, margin: "0 0 8px" }}>¿Sigues en la tienda?</h3>
+        <h3 style={{ fontFamily: "Space Grotesk", fontSize: 17, fontWeight: 600, color: COLORS.text, margin: "0 0 8px" }}>¿Sigues en la sucursal?</h3>
         <p style={{ fontSize: 13, color: COLORS.textMuted, lineHeight: 1.55, margin: "0 0 18px" }}>
-          Solo queremos confirmar que sigues en{openVisitStore ? ` ${openVisitStore.name}` : " tu punto de venta"}. Al responder tomamos tu ubicación actual.
+          Solo queremos confirmar que sigues en{openVisitSucursal ? ` ${openVisitSucursal.name}` : " tu punto de venta"}. Al responder tomamos tu ubicación actual.
         </p>
         {presenceError && <p style={{ color: COLORS.danger, fontSize: 12.5, margin: "0 0 12px" }}>{presenceError}</p>}
         <div style={{ display: "flex", gap: 10 }}>
@@ -721,7 +721,7 @@ export default function PromotoresApp() {
     return () => { active = false; };
   }, [status, records]);
 
-  // Tiendas frecuentes + foto — solo se pide al entrar a "Perfil", no en cada
+  // Sucursales frecuentes + foto — solo se pide al entrar a "Perfil", no en cada
   // carga del dashboard.
   useEffect(() => {
     if (status !== "authed" || screen !== "perfil" || !user) return;
@@ -757,60 +757,71 @@ export default function PromotoresApp() {
     setHistoryPage(1);
   }
 
-  // Obtiene la ubicación GPS real y pide al backend las tiendas cercanas
+  // Obtiene la ubicación GPS real y pide al backend las sucursales cercanas
   // (Haversine, radio ~2 km). No hay asignación fija por promotor.
-  const loadNearbyStores = useCallback(async () => {
+  const loadNearbySucursales = useCallback(async () => {
     if (!("geolocation" in navigator)) {
-      setStoresError("Este dispositivo no soporta geolocalización.");
+      setSucursalesError("Este dispositivo no soporta geolocalización.");
       return;
     }
-    setStoresLoading(true);
-    setStoresError(null);
+    setSucursalesLoading(true);
+    setSucursalesError(null);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setDashCoords(coords);
         try {
           const data = await api.nearbySucursales(coords.lat, coords.lng);
-          setNearbyStores(data?.stores ?? []);
+          setNearbySucursales(data?.sucursales ?? []);
           if (typeof data?.radius === "number") setNearbyRadius(data.radius);
         } catch (e) {
-          setStoresError(
-            e instanceof ApiError ? e.message : "No se pudieron cargar las tiendas cercanas."
+          setSucursalesError(
+            e instanceof ApiError ? e.message : "No se pudieron cargar las sucursales cercanas."
           );
         } finally {
-          setStoresLoading(false);
+          setSucursalesLoading(false);
         }
       },
       (err) => {
-        setStoresLoading(false);
-        setStoresError(gpsErrorMessage(err));
+        setSucursalesLoading(false);
+        setSucursalesError(gpsErrorMessage(err));
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 3000 }
     );
   }, []);
 
-  // Al entrar al dashboard con sesión, carga las tiendas cercanas.
+  // Al entrar al dashboard con sesión, carga las sucursales cercanas.
   useEffect(() => {
-    if (status === "authed" && screen === "dashboard") loadNearbyStores();
+    if (status === "authed" && screen === "dashboard") loadNearbySucursales();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, screen]);
 
-  // Carga el catálogo COMPLETO de tiendas (para pintarlas todas en el mapa).
+  // Carga el catálogo COMPLETO de sucursales (para pintarlas todas en el mapa).
   useEffect(() => {
     if (status !== "authed") return;
     const ctrl = new AbortController();
     api
       .allSucursales(ctrl.signal)
-      .then((data) => setAllStores(data?.stores ?? []))
+      .then((data) => setAllSucursales(data?.sucursales ?? []))
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [status]);
+
+  // Catálogo de productos ACTIVOS: uno de los campos del reporte del día por cada uno.
+  useEffect(() => {
+    if (status !== "authed") return;
+    const ctrl = new AbortController();
+    api
+      .productos(ctrl.signal)
+      .then((data) => setProductos(data?.productos ?? []))
       .catch(() => {});
     return () => ctrl.abort();
   }, [status]);
 
   // GPS REAL únicamente (sin modo simulación). Observa la ubicación del
-  // dispositivo mientras se está en la pantalla de una tienda.
+  // dispositivo mientras se está en la pantalla de una sucursal.
   useEffect(() => {
-    if (screen !== "storeDetail" || !store) return;
+    if (screen !== "sucursalDetail" || !sucursal) return;
     setGpsCoords(null);
     setGpsAccuracy(null);
     setGpsError(null);
@@ -834,7 +845,7 @@ export default function PromotoresApp() {
       if (watchIdRef.current != null && navigator.geolocation) navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     };
-  }, [screen, store]);
+  }, [screen, sucursal]);
 
   // Radio real que aplica el servidor (configurable con CHECK_IN_RADIUS_METERS).
   // Lo envía la sesión; si aún no llegó, usa el valor por defecto del cliente.
@@ -842,20 +853,26 @@ export default function PromotoresApp() {
 
   // Distancia INFORMATIVA para la UI (el servidor es la autoridad). Se calcula
   // solo si hay un fix GPS real.
-  const distance = store && gpsCoords
-    ? distanceMeters(gpsCoords.lat, gpsCoords.lng, store.lat, store.lng)
+  const distance = sucursal && gpsCoords
+    ? distanceMeters(gpsCoords.lat, gpsCoords.lng, sucursal.lat, sucursal.lng)
     : null;
   const inRange = distance != null && distance <= radiusMeters;
+  // Nombre del producto para mostrar un item guardado (si ya no está en el catálogo activo, su id).
+  const productoNombre = (id) => productos.find((p) => p.id === id)?.nombre ?? id;
+  // Items en el orden del catálogo (los productos que ya no están activos, al final).
+  const ordenarItems = (items) => {
+    const pos = (id) => { const i = productos.findIndex((p) => p.id === id); return i === -1 ? productos.length : i; };
+    return [...items].sort((a, b) => pos(a.productoId) - pos(b.productoId));
+  };
 
-  function openStore(storeObj) {
-    setSelectedStore(storeObj);
-    setRollos(0);
-    setCubetas(0);
+  function openSucursal(sucursalObj) {
+    setSelectedSucursal(sucursalObj);
+    setCantidades({});
     setPhoto(null);
     setGpsCoords(null);
     setGpsAccuracy(null);
     setGpsError(null);
-    setScreen("storeDetail");
+    setScreen("sucursalDetail");
   }
 
   async function handlePhotoChange(e) {
@@ -893,9 +910,9 @@ export default function PromotoresApp() {
 
   // Guarda una acción sin red: la encola CIFRADA y refleja el estado optimista.
   async function queueOffline(type, payload, optimisticRecord) {
-    await enqueueAction({ type, sucursalId: store.id, payload });
+    await enqueueAction({ type, sucursalId: sucursal.id, payload });
     setPending(await countQueued());
-    await persistRecords({ ...records, [store.id]: { ...optimisticRecord, pendingSync: true } });
+    await persistRecords({ ...records, [sucursal.id]: { ...optimisticRecord, pendingSync: true } });
   }
 
   async function handleCheckIn() {
@@ -914,7 +931,7 @@ export default function PromotoresApp() {
     // bóveda antes de tocar IndexedDB. hasPhoto marca el registro optimista.
     const payload = { coords, photo };
     const optimistic = {
-      sucursalId: store.id,
+      sucursalId: sucursal.id,
       status: "checked-in",
       checkInTime: new Date().toISOString(),
       checkInDistance: Math.round(distance),
@@ -927,8 +944,8 @@ export default function PromotoresApp() {
         return;
       }
       // El backend revalida identidad, distancia, hora y la foto obligatoria.
-      const rec = await api.checkIn(store.id, payload);
-      await persistRecords({ ...records, [store.id]: rec });
+      const rec = await api.checkIn(sucursal.id, payload);
+      await persistRecords({ ...records, [sucursal.id]: rec });
       setPhoto(null);
     } catch (e) {
       if (e instanceof ApiError) {
@@ -950,28 +967,30 @@ export default function PromotoresApp() {
     }
     setBusy(true);
     const coords = gpsCoords; // coordenadas GPS reales
+    const items = productos
+      .map((p) => ({ productoId: p.id, cantidad: Math.max(0, Math.floor(cantidades[p.id] || 0)) }))
+      .filter((i) => i.cantidad > 0);
     const optimistic = {
-      ...(record || { sucursalId: store.id }),
+      ...(record || { sucursalId: sucursal.id }),
       status: "checked-out",
       checkOutTime: new Date().toISOString(),
       checkOutDistance: Math.round(distance),
-      rollos,
-      cubetas,
+      items,
     };
     try {
       if (!navigator.onLine) {
-        await queueOffline("check-out", { coords, rollos, cubetas }, optimistic);
+        await queueOffline("check-out", { coords, items }, optimistic);
         setShowSheet(false);
         return;
       }
-      const rec = await api.checkOut(store.id, { coords, rollos, cubetas });
-      await persistRecords({ ...records, [store.id]: rec });
+      const rec = await api.checkOut(sucursal.id, { coords, items });
+      await persistRecords({ ...records, [sucursal.id]: rec });
       setShowSheet(false);
     } catch (e) {
       if (e instanceof ApiError) {
         alert(e.message || "No se pudo registrar la salida.");
       } else {
-        await queueOffline("check-out", { coords, rollos, cubetas }, optimistic);
+        await queueOffline("check-out", { coords, items }, optimistic);
         setShowSheet(false);
       }
     } finally {
@@ -1017,8 +1036,8 @@ export default function PromotoresApp() {
     setRecords({});
     setMyGoal(null);
     setMyHistory(null);
-    setSelectedStore(null);
-    setNearbyStores([]);
+    setSelectedSucursal(null);
+    setNearbySucursales([]);
     setDashCoords(null);
     setScreen("dashboard");
     setPromoterId("");
@@ -1027,7 +1046,7 @@ export default function PromotoresApp() {
 
   // Navegación entre las secciones del footer.
   function goTab(key) {
-    setSelectedStore(null);
+    setSelectedSucursal(null);
     setScreen(key);
   }
 
@@ -1095,7 +1114,7 @@ export default function PromotoresApp() {
             <>
               <h1 style={{ fontFamily: "Space Grotesk", fontSize: 24, fontWeight: 600, color: COLORS.text, margin: "0 0 6px" }}>Registro de visitas</h1>
               <p style={{ fontSize: 13, color: COLORS.textMuted, margin: "0 0 24px", lineHeight: 1.5 }}>
-                Ingresa tu ID de promotor y contraseña para ver las tiendas cercanas a tu ubicación.
+                Ingresa tu ID de promotor y contraseña para ver las sucursales cercanas a tu ubicación.
               </p>
 
               <label style={{ fontSize: 12, color: COLORS.textMuted, display: "block", marginBottom: 6 }}>ID de promotor</label>
@@ -1233,68 +1252,66 @@ export default function PromotoresApp() {
         <div style={{ padding: "20px 20px 96px", maxWidth: 480, margin: "0 auto" }}>
           {showCheckoutReminder && (
             <button
-              onClick={() => openVisitStore && openStore(openVisitStore)}
-              style={{ width: "100%", textAlign: "left", display: "flex", gap: 10, alignItems: "flex-start", background: COLORS.accentSoft, border: `1px solid ${COLORS.accent}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14, cursor: openVisitStore ? "pointer" : "default" }}
+              onClick={() => openVisitSucursal && openSucursal(openVisitSucursal)}
+              style={{ width: "100%", textAlign: "left", display: "flex", gap: 10, alignItems: "flex-start", background: COLORS.accentSoft, border: `1px solid ${COLORS.accent}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14, cursor: openVisitSucursal ? "pointer" : "default" }}
             >
               <Clock size={17} color={COLORS.accentText} style={{ flexShrink: 0, marginTop: 1 }} />
               <span style={{ fontSize: 12.5, color: COLORS.text, lineHeight: 1.45 }}>
-                Sigues marcado como "en tienda"{openVisitStore ? ` en ${openVisitStore.name}` : ""}. Si ya terminaste,
+                Sigues marcado como "en sucursal"{openVisitSucursal ? ` en ${openVisitSucursal.name}` : ""}. Si ya terminaste,
                 no olvides registrar tu salida.
               </span>
             </button>
           )}
           <span style={{ fontSize: 11, letterSpacing: "0.1em", color: COLORS.textMuted, fontWeight: 600 }}>TU UBICACIÓN</span>
-          <MapView coords={dashCoords} stores={allSucursales} />
+          <MapView coords={dashCoords} sucursales={allSucursales} />
 
           <SalesGoals goal={myGoal} />
 
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <span style={{ fontSize: 11, letterSpacing: "0.1em", color: COLORS.textMuted, fontWeight: 600 }}>
-              TIENDAS CERCANAS {dashCoords ? `(${(nearbyRadius / 1000).toFixed(nearbyRadius % 1000 ? 1 : 0)} km)` : ""}
+              SUCURSALES CERCANAS {dashCoords ? `(${(nearbyRadius / 1000).toFixed(nearbyRadius % 1000 ? 1 : 0)} km)` : ""}
             </span>
             <button
-              onClick={loadNearbyStores}
-              disabled={storesLoading}
-              style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "5px 10px", color: COLORS.textMuted, fontSize: 11.5, cursor: storesLoading ? "default" : "pointer" }}
+              onClick={loadNearbySucursales}
+              disabled={sucursalesLoading}
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "5px 10px", color: COLORS.textMuted, fontSize: 11.5, cursor: sucursalesLoading ? "default" : "pointer" }}
             >
-              <RefreshCw size={13} /> {storesLoading ? "Buscando…" : "Actualizar"}
+              <RefreshCw size={13} /> {sucursalesLoading ? "Buscando…" : "Actualizar"}
             </button>
           </div>
 
           <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-            {storesError && (
+            {sucursalesError && (
               <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: COLORS.dangerSoft, color: COLORS.danger, borderRadius: 10, padding: "12px 14px", fontSize: 12.5, lineHeight: 1.4 }}>
                 <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
-                <span>{storesError}</span>
+                <span>{sucursalesError}</span>
               </div>
             )}
-            {!storesError && storesLoading && stores.length === 0 && (
+            {!sucursalesError && sucursalesLoading && sucursales.length === 0 && (
               <p style={{ color: COLORS.textMuted, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
-                <Navigation size={15} /> Obteniendo tu ubicación y buscando tiendas cercanas…
+                <Navigation size={15} /> Obteniendo tu ubicación y buscando sucursales cercanas…
               </p>
             )}
-            {!storesError && !storesLoading && stores.length === 0 && dashCoords && (
+            {!sucursalesError && !sucursalesLoading && sucursales.length === 0 && dashCoords && (
               <p style={{ color: COLORS.textMuted, fontSize: 13 }}>
-                No hay tiendas dentro de {(nearbyRadius / 1000).toFixed(nearbyRadius % 1000 ? 1 : 0)} km de tu ubicación.
+                No hay sucursales dentro de {(nearbyRadius / 1000).toFixed(nearbyRadius % 1000 ? 1 : 0)} km de tu ubicación.
               </p>
             )}
-            {stores.map((s) => {
+            {sucursales.map((s) => {
               const rec = records[s.id];
               const status2 = rec?.status === "checked-out" ? "done" : rec?.status === "checked-in" ? "in" : "none";
               return (
                 <button
                   key={s.id}
-                  onClick={() => openStore(s)}
+                  onClick={() => openSucursal(s)}
                   style={{ textAlign: "left", background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: "16px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 14 }}
                 >
                   <div style={{ width: 40, height: 40, borderRadius: 10, background: COLORS.surface2, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <MapPin size={18} color={COLORS.textMuted} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ margin: 0, color: COLORS.text, fontSize: 14.5, fontWeight: 600 }}>{s.name} - {s.id}</p>
-                    {s.address && s.address !== `Tienda #${s.id}` && (
-                      <p style={{ margin: "2px 0 0", color: COLORS.textMuted, fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.address}</p>
-                    )}
+                    <p style={{ margin: 0, color: COLORS.text, fontSize: 14.5, fontWeight: 600 }}>{s.clienteNombre} – {s.name}</p>
+                    <p style={{ margin: "2px 0 0", color: COLORS.textMuted, fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>#{s.id}{s.address ? ` · ${s.address}` : ""}</p>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
                     {typeof s.distance === "number" && (
@@ -1313,7 +1330,7 @@ export default function PromotoresApp() {
   }
 
   // --- Store detail ---------------------------------------------------------
-  if (screen === "storeDetail" && store) {
+  if (screen === "sucursalDetail" && sucursal) {
     const isDone = record?.status === "checked-out";
     const isCheckedIn = record?.status === "checked-in";
     return (
@@ -1324,11 +1341,11 @@ export default function PromotoresApp() {
         {presenceModalNode}
         <div style={{ padding: "18px 20px 40px", maxWidth: 460, margin: "0 auto" }}>
           <button onClick={() => setScreen("dashboard")} style={{ background: "none", border: "none", color: COLORS.textMuted, display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer", padding: 0, marginBottom: 14 }}>
-            <ArrowLeft size={15} /> Tiendas
+            <ArrowLeft size={15} /> Sucursales
           </button>
 
-          <h2 style={{ fontFamily: "Space Grotesk", fontSize: 20, fontWeight: 600, color: COLORS.text, margin: "0 0 2px" }}>{store.name}</h2>
-          <p style={{ fontSize: 12.5, color: COLORS.textMuted, margin: "0 0 22px" }}>{store.address}</p>
+          <h2 style={{ fontFamily: "Space Grotesk", fontSize: 20, fontWeight: 600, color: COLORS.text, margin: "0 0 2px" }}>{sucursal.clienteNombre ? `${sucursal.clienteNombre} – ` : ""}{sucursal.name}</h2>
+          <p style={{ fontSize: 12.5, color: COLORS.textMuted, margin: "0 0 22px" }}>{sucursal.address}</p>
 
           {!isDone && (
             <>
@@ -1348,7 +1365,7 @@ export default function PromotoresApp() {
               {isCheckedIn && (
                 <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 8, color: COLORS.textMuted, fontSize: 13 }}>
                   <Clock size={15} />
-                  <span>En tienda desde las {fmtTime(record.checkInTime)} · {fmtDuration(record.checkInTime)}</span>
+                  <span>En la sucursal desde las {fmtTime(record.checkInTime)} · {fmtDuration(record.checkInTime)}</span>
                 </div>
               )}
 
@@ -1438,7 +1455,7 @@ export default function PromotoresApp() {
               {gpsCoords && !inRange && (
                 <p style={{ display: "flex", gap: 6, alignItems: "flex-start", fontSize: 12, color: COLORS.textMuted, marginTop: 12, lineHeight: 1.5 }}>
                   <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
-                  Parece que estás a {fmtDistance(distance)} de la tienda. Debes estar a {fmtDistance(radiusMeters)} o menos; el servidor validará tu ubicación al registrar.
+                  Parece que estás a {fmtDistance(distance)} de la sucursal. Debes estar a {fmtDistance(radiusMeters)} o menos; el servidor validará tu ubicación al registrar.
                 </p>
               )}
             </>
@@ -1455,13 +1472,18 @@ export default function PromotoresApp() {
               <Row label="Entrada" value={`${fmtTime(record.checkInTime)}`} />
               <Row label="Salida" value={`${fmtTime(record.checkOutTime)}`} />
               <Row label="Duracion" value={fmtDuration(record.checkInTime, record.checkOutTime)} />
-              <Row label="Rollos vendidos" value={record.rollos} />
-              <Row label="Cubetas vendidas" value={record.cubetas} last />
+              {(record.items ?? []).length > 0 ? (
+                ordenarItems(record.items).map((it, i, arr) => (
+                  <Row key={it.productoId} label={productoNombre(it.productoId)} value={it.cantidad} last={i === arr.length - 1} />
+                ))
+              ) : (
+                <Row label="Productos vendidos" value="Ninguno" last />
+              )}
               <button
                 onClick={() => setScreen("dashboard")}
                 style={{ width: "100%", marginTop: 18, padding: "12px 0", borderRadius: 10, border: `1px solid ${COLORS.border}`, background: COLORS.surface2, color: COLORS.text, fontFamily: "Inter", fontWeight: 600, fontSize: 14, cursor: "pointer" }}
               >
-                Volver a tiendas
+                Volver a sucursales
               </button>
             </div>
           )}
@@ -1474,8 +1496,19 @@ export default function PromotoresApp() {
               <h3 style={{ fontFamily: "Space Grotesk", fontSize: 17, fontWeight: 600, color: COLORS.text, margin: "0 0 4px" }}>Reporte del dia</h3>
               <p style={{ fontSize: 12.5, color: COLORS.textMuted, margin: "0 0 6px" }}>Captura lo vendido antes de confirmar tu salida.</p>
 
-              <Stepper label="Rollos" value={rollos} onChange={setRollos} />
-              <Stepper label="Cubetas" value={cubetas} onChange={setCubetas} />
+              {productos.map((p) => (
+                <Stepper
+                  key={p.id}
+                  label={p.nombre}
+                  value={cantidades[p.id] || 0}
+                  onChange={(v) => setCantidades((c) => ({ ...c, [p.id]: v }))}
+                />
+              ))}
+              {productos.length === 0 && (
+                <p style={{ fontSize: 12.5, color: COLORS.textMuted, margin: "12px 0 0" }}>
+                  Aún no hay productos configurados; puedes registrar la salida sin cantidades.
+                </p>
+              )}
 
               {/* Aviso informativo (no bloquea): el servidor valida la distancia real. */}
               {gpsCoords && !inRange && (
@@ -1666,7 +1699,7 @@ export default function PromotoresApp() {
 
           {myHistory?.frequentSucursales?.length > 0 && (
             <div style={{ marginTop: 18 }}>
-              <span style={{ fontSize: 11, letterSpacing: "0.1em", color: COLORS.textMuted, fontWeight: 600 }}>TIENDAS FRECUENTES</span>
+              <span style={{ fontSize: 11, letterSpacing: "0.1em", color: COLORS.textMuted, fontWeight: 600 }}>SUCURSALES FRECUENTES</span>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
                 {myHistory.frequentSucursales.map((s) => (
                   <span key={s.sucursalId} style={{ fontSize: 12, background: COLORS.surface2, border: `1px solid ${COLORS.border}`, borderRadius: 999, padding: "5px 10px", color: COLORS.text }}>
@@ -1758,13 +1791,13 @@ export default function PromotoresApp() {
                       {visits.map((v, i) => (
                         <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 8, background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "10px 12px" }}>
                           <div style={{ minWidth: 0 }}>
-                            <div style={{ fontSize: 13.5, fontWeight: 700, color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.sucursalName}</div>
+                            <div style={{ fontSize: 13.5, fontWeight: 700, color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.clienteNombre ? `${v.clienteNombre} – ` : ""}{v.sucursalName}</div>
                             <div style={{ fontSize: 11.5, color: COLORS.textMuted, marginTop: 2 }}>
                               Entró {fmtTime(v.checkInTime)} · Salió {v.checkOutTime ? fmtTime(v.checkOutTime) : "--:--"}
                             </div>
                           </div>
                           <div style={{ textAlign: "right", flexShrink: 0, color: COLORS.accentText, fontFamily: "JetBrains Mono", fontWeight: 800, fontSize: 13 }}>
-                            {v.rollos}R · {v.cubetas}C
+                            {ordenarItems(v.items ?? []).map((it) => `${it.cantidad} ${productoNombre(it.productoId)}`).join(" · ") || "Sin ventas"}
                           </div>
                         </div>
                       ))}
@@ -1924,7 +1957,7 @@ function ConnectivityBanner({ online, pending, syncing, onSync }) {
 function StatusPill({ status }) {
   const map = {
     none: { label: "Sin visitar", color: COLORS.textMuted, bg: COLORS.surface2 },
-    in: { label: "En tienda", color: COLORS.accentText, bg: COLORS.accentSoft },
+    in: { label: "En sucursal", color: COLORS.accentText, bg: COLORS.accentSoft },
     done: { label: "Completada", color: COLORS.success, bg: COLORS.successSoft },
   };
   const s = map[status];
