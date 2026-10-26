@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // Perfil de un promotor (modal) — historial de check-in/check-out, su
-// supervisor y las tiendas a las que suele ir. Se abre al hacer clic en un
+// supervisor y las sucursales a las que suele ir. Se abre al hacer clic en un
 // promotor desde el tablero del gerente o del supervisor (este último solo
 // puede abrir a los suyos; el servidor lo valida).
 //
@@ -53,14 +53,14 @@ function VisitRow({ v, promoterId, reportKey, reporting, onToggleReport, onSent,
     <div style={{ background: COLORS.surface2, borderRadius: 10, padding: "8px 10px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 700, color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.sucursalName}</div>
+          <div style={{ fontWeight: 700, color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.clienteNombre ? `${v.clienteNombre} – ` : ""}{v.sucursalName}</div>
           <div style={{ color: COLORS.textMuted, marginTop: 1 }}>
             <MapPin size={10} style={{ verticalAlign: "-1px" }} /> Entró {fmtDateTime(v.checkInTime, hour12) || "--"} · Salió {fmtDateTime(v.checkOutTime, hour12) || "--"}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           <div style={{ textAlign: "right", color: COLORS.text, fontFamily: "JetBrains Mono", fontWeight: 700 }}>
-            {fmtNum(v.rollos)}R · {fmtNum(v.cubetas)}C
+            {(v.items ?? []).map((it) => `${fmtNum(it.cantidad)} ${it.nombre}`).join(" · ") || "Sin ventas"}
           </div>
           <button
             onClick={() => onToggleReport(reportKey)}
@@ -231,7 +231,7 @@ export default function PromoterProfile({ promoterId, onClose, hour12 = true }) 
 
               <div style={{ marginBottom: 16 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
-                  <Store size={13} /> Tiendas frecuentes
+                  <Store size={13} /> Sucursales frecuentes
                 </div>
                 {profile.frequentSucursales.length === 0 ? (
                   <p style={{ fontSize: 12.5, color: COLORS.textMuted }}>Sin visitas registradas.</p>

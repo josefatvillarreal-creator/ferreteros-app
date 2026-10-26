@@ -70,7 +70,17 @@ export const MEXICO_ESTADOS = [
 // Color del marcador/estado según ventas: verde si vendió, ámbar si está activo
 // pero aún sin ventas.
 export function salesColor(p) {
-  return p.rollos + p.cubetas > 0 ? COLORS.success : COLORS.accent;
+  return p.pieces > 0 ? COLORS.success : COLORS.accent;
+}
+
+// Piezas de un promotor (o fila de resumen) considerando solo los productos
+// marcados en el filtro; sin selección (Set vacío) = todas. `byProduct` es
+// { [productoId]: cantidad } (ver summary.promoters[].byProduct).
+export function pieceCount(p, selectedIds) {
+  if (!selectedIds || selectedIds.size === 0) return p.pieces || 0;
+  let total = 0;
+  for (const id of selectedIds) total += p.byProduct?.[id] || 0;
+  return total;
 }
 
 // Fondo de textura de marca (igual que en la app del promotor).
@@ -95,7 +105,7 @@ export function Brand() {
 // ---------------------------------------------------------------------------
 // Mapa nacional (Leaflet empaquetado con la app; teselas con respaldo en lib/mapTiles.js).
 // ---------------------------------------------------------------------------
-export function NationalMap({ promoters, onSelect }) {
+export function NationalMap({ promoters, onSelect, products = [] }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
   const layerRef = useRef(null);
@@ -143,8 +153,8 @@ export function NationalMap({ promoters, onSelect }) {
       const icon = L.divIcon({ className: "", html, iconSize: [22, 22], iconAnchor: [11, 11] });
       const popup = `<div style="font-family:Inter,system-ui;min-width:150px">
         <div style="font-weight:700;margin-bottom:2px">${p.name}</div>
-        <div style="color:#666;font-size:12px;margin-bottom:6px">${p.estado || "Sin estado"} · ${p.status === "in" ? "En tienda" : "Cerró visitas"}</div>
-        <div style="font-size:12px">Rollos: <b>${fmtNum(p.rollos)}</b> · Cubetas: <b>${fmtNum(p.cubetas)}</b></div>
+        <div style="color:#666;font-size:12px;margin-bottom:6px">${p.estado || "Sin estado"} · ${p.status === "in" ? "En sucursal" : "Cerró visitas"}</div>
+        <div style="font-size:12px">${products.filter((pr) => p.byProduct?.[pr.id]).map((pr) => `${pr.nombre}: <b>${fmtNum(p.byProduct[pr.id])}</b>`).join(" · ") || "Sin ventas"}</div>
         <div style="font-size:12px;margin-top:2px">Vendido: <b>${fmtMoney(p.money)}</b></div>
       </div>`;
       const marker = L.marker([p.lat, p.lng], { icon }).bindPopup(popup).addTo(layer);
@@ -156,7 +166,7 @@ export function NationalMap({ promoters, onSelect }) {
     } else if (pts.length > 1) {
       try { mapRef.current.fitBounds(pts, { padding: [40, 40], maxZoom: 11 }); } catch { /* noop */ }
     }
-  }, [L, retryKey, promoters, onSelect]);
+  }, [L, retryKey, promoters, onSelect, products]);
 
   if (failed) {
     return (
@@ -199,12 +209,24 @@ export function BarChart({ data, color, format }) {
   );
 }
 
-// Cuadrito de rollos / cubetas.
+// Cuadrito con la cantidad de UN producto.
 export function CountBox({ label, value }) {
   return (
     <div style={{ flex: 1, background: COLORS.surface2, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "6px 8px", textAlign: "center", minWidth: 0 }}>
       <div style={{ fontSize: 16, fontWeight: 800, color: COLORS.text, fontFamily: "JetBrains Mono", lineHeight: 1.1 }}>{fmtNum(value)}</div>
       <div style={{ fontSize: 9.5, letterSpacing: "0.06em", color: COLORS.textMuted, fontWeight: 600, textTransform: "uppercase" }}>{label}</div>
+    </div>
+  );
+}
+
+// Un cuadrito por producto del catálogo (cantidad vendida por ese promotor).
+export function ProductCountBoxes({ p, products = [] }) {
+  if (!products.length) return null;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, width: Math.min(products.length, 3) * 58, flexShrink: 0 }}>
+      {products.map((pr) => (
+        <CountBox key={pr.id} label={pr.nombre} value={p.byProduct?.[pr.id] || 0} />
+      ))}
     </div>
   );
 }
@@ -243,8 +265,8 @@ export function ChartCard({ title, children }) {
   );
 }
 
-// Barra de progreso de meta SEMANAL (unidades-equivalentes: rollos + cubetas
-// ponderadas, los galones no cuentan). `goal` = { target, achieved, reached } | null.
+// Barra de progreso de meta SEMANAL (unidades-equivalentes: cantidad × equivalencia
+// de cada producto, ver Productos en el Sheet). `goal` = { target, achieved, reached } | null.
 export function GoalBar({ goal }) {
   if (!goal) return null;
   const pct = Math.min(100, Math.round((goal.achieved / goal.target) * 100));
@@ -266,7 +288,7 @@ export function GoalBar({ goal }) {
 // botón para fijar/cambiar su meta semanal — el supervisor solo la ve.
 // `hour12` (default true): el tablero de admin pasa `false` para mostrar
 // "entró/salió" en formato 24h; supervisor no lo pasa y se queda en 12h.
-export function PromoterRow({ p, onClick, onEditGoal, hour12 = true }) {
+export function PromoterRow({ p, onClick, onEditGoal, hour12 = true, products = [] }) {
   const color = salesColor(p);
   const initials = (p.name || p.id || "?").split(" ").map((n) => n[0]).slice(0, 2).join("");
   return (
@@ -278,7 +300,7 @@ export function PromoterRow({ p, onClick, onEditGoal, hour12 = true }) {
         <div style={{ width: 38, height: 38, borderRadius: "50%", background: COLORS.accentSoft, color: COLORS.accentText, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, fontWeight: 800 }}>
           {initials}
         </div>
-        <span style={{ position: "absolute", right: -1, bottom: -1, width: 12, height: 12, borderRadius: "50%", background: color, border: `2px solid ${COLORS.surface}` }} title={p.rollos + p.cubetas > 0 ? "Con ventas" : "Sin ventas"} />
+        <span style={{ position: "absolute", right: -1, bottom: -1, width: 12, height: 12, borderRadius: "50%", background: color, border: `2px solid ${COLORS.surface}` }} title={p.pieces > 0 ? "Con ventas" : "Sin ventas"} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -296,21 +318,18 @@ export function PromoterRow({ p, onClick, onEditGoal, hour12 = true }) {
         <div style={{ fontSize: 11.5, color: COLORS.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {p.status === "missing"
             ? `${p.estado || "Sin estado"} · Sin visita hoy`
-            : `${p.estado || "Sin estado"} · ${p.status === "in" ? "En tienda" : "Cerró"} · entró ${fmtTime(p.checkInTime, hour12)} · salió ${fmtTime(p.checkOutTime, hour12)}`}
+            : `${p.estado || "Sin estado"} · ${p.status === "in" ? "En sucursal" : "Cerró"} · entró ${fmtTime(p.checkInTime, hour12)} · salió ${fmtTime(p.checkOutTime, hour12)}`}
         </div>
         <div style={{ fontSize: 13, fontWeight: 800, color: COLORS.accentText, fontFamily: "JetBrains Mono", marginTop: 2 }}>{fmtMoney(p.money)}</div>
         <GoalBar goal={p.goal} />
       </div>
-      <div style={{ display: "flex", gap: 6, width: 116, flexShrink: 0 }}>
-        <CountBox label="Rollos" value={p.rollos} />
-        <CountBox label="Cubetas" value={p.cubetas} />
-      </div>
+      <ProductCountBoxes p={p} products={products} />
     </div>
   );
 }
-
-// Modal para fijar la meta SEMANAL personalizada (unidades-equivalentes de
-// rollo) de un promotor, como excepción al default de 30/semana. Solo lo abre
+// Modal para fijar la meta SEMANAL personalizada (en unidades equivalentes)
+// de un promotor, como excepción al default de 30/semana. Solo lo abre
+// unidad equivalente) de un promotor, como excepción al default de 30/semana. Solo lo abre
 // el tablero de admin/gerente (ver el botón "Meta" en PromoterRow).
 // `onSave(meta)` recibe el número ya validado; el llamador hace la petición y
 // refresca.
@@ -335,7 +354,7 @@ export function EditGoalModal({ promoter, onSave, onClose, saving }) {
           <Target size={16} color={COLORS.accentText} />
           <span style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>Meta semanal</span>
         </div>
-        <p style={{ fontSize: 12.5, color: COLORS.textMuted, margin: "4px 0 14px" }}>{promoter.name} · unidades-equivalentes en la semana (1 rollo = 1, 1 cubeta = 0.6; los galones no cuentan). Default sin meta propia: 30.</p>
+        <p style={{ fontSize: 12.5, color: COLORS.textMuted, margin: "4px 0 14px" }}>{promoter.name} · unidades equivalentes en la semana (cada producto pesa según su equivalencia en la pestaña Productos). Default sin meta propia: 30.</p>
         <input
           type="number"
           min="1"
@@ -365,27 +384,39 @@ export function EditGoalModal({ promoter, onSave, onClose, saving }) {
 }
 
 // --- Exportación CSV / Excel -------------------------------------------------
-export const EXPORT_HEADERS = ["ID", "Promotor", "Supervisor", "Estado", "ID Tienda", "Tienda", "Día", "Entrada", "Salida", "Rollos", "Cubetas", "Dinero"];
+// Encabezados del CSV/Excel: una columna por producto del catálogo.
+export function buildExportHeaders(products = []) {
+  return [
+    "ID", "Promotor", "Supervisor", "Estado", "Cliente", "ID Sucursal", "Sucursal", "Día", "Entrada", "Salida",
+    ...products.map((pr) => pr.nombre),
+    "Unidades", "Dinero",
+  ];
+}
 
-export function buildExportRows(promoters, hour12 = true) {
+// Una fila (arreglo alineado con buildExportHeaders) por visita de cada promotor.
+export function buildExportRows(promoters, products = [], hour12 = true) {
   return promoters.flatMap((p) =>
-    (p.visits ?? []).map((v) => ({
-      id: p.id,
-      promotor: p.name,
-      supervisor: p.supervisor || "Sin supervisor",
-      // Estado DEL PROMOTOR (columna "Estado" de la pestaña Promotores, fijo
-      // por promotor) — no el de la tienda visitada (v.estado), a propósito:
-      // mismo criterio que el filtro de estado del tablero.
-      estado: p.estado || "Sin estado",
-      idSucursal: v.sucursalId,
-      tienda: v.sucursalName,
-      dia: v.day || "",
-      entrada: fmtDateTime(v.checkInTime, hour12),
-      salida: fmtDateTime(v.checkOutTime, hour12),
-      rollos: v.rollos,
-      cubetas: v.cubetas,
-      dinero: v.money,
-    }))
+    (p.visits ?? []).map((v) => {
+      const qty = new Map((v.items ?? []).map((i) => [i.productoId, i.cantidad]));
+      return [
+        p.id,
+        p.name,
+        p.supervisor || "Sin supervisor",
+        // Estado DEL PROMOTOR (columna "Estado" de la pestaña Promotores, fijo
+        // por promotor) — no el de la sucursal visitada (v.estado), a propósito:
+        // mismo criterio que el filtro de estado del tablero.
+        p.estado || "Sin estado",
+        v.clienteNombre || "",
+        v.sucursalId,
+        v.sucursalName,
+        v.day || "",
+        fmtDateTime(v.checkInTime, hour12),
+        fmtDateTime(v.checkOutTime, hour12),
+        ...products.map((pr) => qty.get(pr.id) ?? 0),
+        v.units,
+        v.money,
+      ];
+    })
   );
 }
 
@@ -400,16 +431,14 @@ function triggerBlobDownload(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function downloadCsv(rows, filename) {
+export function downloadCsv(headers, rows, filename) {
   if (!rows.length) return;
   const escape = (v) => {
     const s = String(v ?? "");
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const lines = [EXPORT_HEADERS.join(",")];
-  for (const r of rows) {
-    lines.push([r.id, r.promotor, r.supervisor, r.estado, r.idSucursal, r.tienda, r.dia, r.entrada, r.salida, r.rollos, r.cubetas, r.dinero].map(escape).join(","));
-  }
+  const lines = [headers.map(escape).join(",")];
+  for (const r of rows) lines.push(r.map(escape).join(","));
   // BOM al inicio: para que Excel detecte UTF-8 y no rompa los acentos/ñ.
   const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
   triggerBlobDownload(blob, filename);
@@ -417,16 +446,13 @@ export function downloadCsv(rows, filename) {
 
 // Carga la librería de Excel solo cuando se pide (nunca la descarga un
 // promotor de campo: ninguno de estos componentes se monta para ellos).
-export async function downloadXlsx(rows, filename) {
+export async function downloadXlsx(headers, rows, filename) {
   if (!rows.length) return;
   const XLSX = await import("xlsx");
-  const data = rows.map((r) => ({
-    ID: r.id, Promotor: r.promotor, Supervisor: r.supervisor, Estado: r.estado, "ID Tienda": r.idSucursal, Tienda: r.tienda, Día: r.dia,
-    Entrada: r.entrada, Salida: r.salida, Rollos: r.rollos, Cubetas: r.cubetas, Dinero: r.dinero,
-  }));
-  const ws = XLSX.utils.json_to_sheet(data);
+  const data = rows.map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i]])));
+  const ws = XLSX.utils.json_to_sheet(data, { header: headers });
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Promotores");
+  XLSX.utils.book_append_sheet(wb, ws, "Visitas");
   XLSX.writeFile(wb, filename);
 }
 

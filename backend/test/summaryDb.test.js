@@ -57,4 +57,5 @@ test("getPromoterHistoryPage trae sucursal, cliente, items y unidades por visita
   assert.equal(v.clienteNombre, "Ferretería Demo");
   assert.equal(v.units, 5);
   assert.equal(v.items.length, 2);
+  assert.equal(v.items.find((i) => i.productoId === "rollo").nombre, "Rollo");
 });

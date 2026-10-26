@@ -610,7 +610,8 @@ export async function getPromoterHistoryPage(promoterId, { page = 1, daysPerPage
       status: v.status,
       checkInTime: v.checkInTime,
       checkOutTime: v.checkOutTime,
-      items: v.items,
+      // `nombre` del producto: el historial puede incluir productos que ya no están activos.
+      items: v.items.map((i) => ({ ...i, nombre: catalog.get(i.productoId)?.nombre ?? i.productoId })),
       units: unitsOf(v.items, catalog),
     });
   }
