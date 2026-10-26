@@ -1,19 +1,15 @@
-// Esquema de datos — App Promotores
-// Motor: en los servidores (Render) es PostgreSQL; en local es SQLite
-// (DATABASE_URL="file:./dev.db"). El provider de abajo debe COINCIDIR con el
-// motor real: por eso en local va "sqlite" (cambio gestionado con skip-worktree,
-// no se sube al repo). El resto del código (queries Prisma) es idéntico.
-//
-// NOTA (corrección 22/08/2026): el provider estaba corrupto ("postgresql{}][]"),
-// lo que rompía `prisma db push` / `generate`. Se corrigió a "sqlite" para el
-// entorno local. En los servidores debe ser "postgresql".
+// Esquema de datos — Ferreteros APP
+// Motor: PostgreSQL en los servidores (Render). Este archivo se versiona con
+// provider = "postgresql". Para LOCAL con SQLite NO lo edites: usa
+// `npm run db:local` (backend/scripts/prisma-local.mjs genera una copia ignorada
+// por git con provider = "sqlite"). El resto del código (queries Prisma) es idéntico.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -22,7 +18,7 @@ model Promoter {
   name               String
   location           String? // UBICACION
   supervisor         String? // SUPERVISOR
-  estado             String? // ESTADO de México asignado al promotor (columna "Estado" de la pestaña Promotores). Fijo, no se deriva de las tiendas visitadas.
+  estado             String? // ESTADO de México asignado al promotor (columna "Estado" de la pestaña Promotores). Fijo, no se deriva de las sucursales visitadas.
   password           String // hash bcrypt de la contraseña (nunca en texto plano)
   createdAt          DateTime            @default(now())
   visits             VisitRecord[]
@@ -31,39 +27,77 @@ model Promoter {
   threads            Thread[]
 }
 
-// Catálogo GLOBAL de tiendas (sin asignación por promotor). La visibilidad se
-// resuelve por cercanía geográfica en tiempo real (GET /api/sucursales?lat&lng).
-model Store {
-  id      String        @id
-  name    String
-  address String
-  lat     Float
-  lng     Float
-  estado  String? // ESTADO de México (columna "Estado" de la pestaña Tiendas). Usado por el filtro del gerente.
-  visits  VisitRecord[]
+// Cliente ferretero (cadena o grupo). Tiene varias sucursales; el catálogo se
+// sincroniza desde la pestaña Clientes del Sheet (ver catalogSync.js).
+model Cliente {
+  id         String     @id
+  nombre     String
+  estado     String? // ESTADO de México del cliente (opcional)
+  sucursales Sucursal[]
+}
+
+// Sucursal de un cliente: ahí se hace el check-in/out por GPS. Catálogo GLOBAL
+// (sin asignación por promotor); la visibilidad se resuelve por cercanía
+// geográfica en tiempo real (GET /api/sucursales?lat&lng).
+model Sucursal {
+  id        String        @id // columna Num de la pestaña Sucursales
+  cliente   Cliente       @relation(fields: [clienteId], references: [id])
+  clienteId String
+  name      String
+  address   String
+  lat       Float
+  lng       Float
+  estado    String? // ESTADO de México (columna "Estado" de la pestaña Sucursales). Usado por el filtro del gerente.
+  visits    VisitRecord[]
+
+  @@index([clienteId])
+}
+
+// Producto del catálogo configurable (pestaña Productos del Sheet). La meta
+// cuenta cantidad × equivalencia; el dinero, cantidad × precio. Un producto con
+// activo = false deja de salir en el formulario pero conserva su historial.
+model Producto {
+  id           String      @id
+  nombre       String
+  unidad       String      @default("pza")
+  equivalencia Float       @default(1)
+  precio       Float       @default(0)
+  activo       Boolean     @default(true)
+  orden        Int         @default(0)
+  items        VisitItem[]
 }
 
 model VisitRecord {
-  id               String    @id @default(uuid())
-  promoter         Promoter  @relation(fields: [promoterId], references: [id])
+  id               String      @id @default(uuid())
+  promoter         Promoter    @relation(fields: [promoterId], references: [id])
   promoterId       String
-  store            Store     @relation(fields: [sucursalId], references: [id])
-  sucursalId          String
-  day              String // YYYY-MM-DD — 1 visita por promotor/tienda/día
+  sucursal         Sucursal    @relation(fields: [sucursalId], references: [id])
+  sucursalId       String
+  day              String // YYYY-MM-DD — 1 visita por promotor/sucursal/día
   status           String // "checked-in" | "checked-out"
   checkInTime      DateTime?
   checkInDistance  Int?
   checkOutTime     DateTime?
   checkOutDistance Int?
-  rollos           Int       @default(0)
-  cubetas          Int       @default(0)
-  galones          Int       @default(0)
+  items            VisitItem[]
   photo            String? // foto de la visita en Base64 (data URL), persistida
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 
   @@unique([promoterId, sucursalId, day])
   @@index([promoterId, day])
+}
+
+// Cantidad vendida de un producto en una visita (se llena en el check-out).
+model VisitItem {
+  id         String      @id @default(uuid())
+  visit      VisitRecord @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  visitId    String
+  producto   Producto    @relation(fields: [productoId], references: [id])
+  productoId String
+  cantidad   Int
+
+  @@unique([visitId, productoId])
 }
 
 // Reporte de acciones/estrategias de la competencia, capturado desde la

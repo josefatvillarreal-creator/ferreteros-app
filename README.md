@@ -167,38 +167,29 @@ documento compartido con su `client_email` como editor. Ver
 
 ## Base de datos (Prisma)
 
-Modelos en `backend/prisma/schema.prisma`: `Promoter`, `Store`, `VisitRecord`
-(rollos, cubetas, con la foto del check-in en Base64 — la columna `galones`
-sigue en el esquema por compatibilidad con datos históricos, pero ya no se
-usa en ningún flujo), `CompetitionReport` (con sus fotos en Base64, JSON-array),
+Modelos en `backend/prisma/schema.prisma`: `Promoter`, `Cliente`, `Sucursal`
+(pertenece a un cliente; ahí se hace el check-in/out), `Producto` (catálogo
+configurable: equivalencia para la meta y precio), `VisitRecord` (visita del día
+con la foto del check-in en Base64) y `VisitItem` (cantidad por producto de cada
+visita), `CompetitionReport` (con sus fotos en Base64, JSON-array),
 `TrainingProgress` (avance en quiz y tarjetas Leitner por persona), y `Thread` /
-`ThreadComment` (hilos tipo foro: `kind` = `supervisor` o `ticket`; los tickets
-tienen `status` abierto/cerrado). Motor:
+`ThreadComment` (hilos tipo foro: `kind` = `supervisor` o `ticket`). Motor:
 
-- **Local:** SQLite (`backend/prisma/dev.db`).
 - **Render:** PostgreSQL (gestionado por Render, ver `render.yaml`).
-
-> ⚠️ **`schema.prisma` tiene `git update-index --skip-worktree` activado.** La
-> copia local dice `provider = "sqlite"`; la versión que está en git (y que
-> Render despliega) dice `provider = "postgresql"`. Git **no** te va a avisar
-> si cambias el modelo y se te olvida reflejarlo en la versión de git. Antes de
-> cualquier commit que toque `schema.prisma`:
-> ```bash
-> git update-index --no-skip-worktree backend/prisma/schema.prisma
-> #  edita el archivo para que diga  provider = "postgresql"
-> git add backend/prisma/schema.prisma
-> #  edita el archivo OTRA VEZ para que vuelva a decir  provider = "sqlite"
-> git update-index --skip-worktree backend/prisma/schema.prisma
-> ```
-> (el resto del contenido — los modelos — debe ser idéntico en ambas versiones;
-> solo el `provider` cambia).
+- **Local:** SQLite, **sin editar `schema.prisma`**: el archivo versionado trae
+  `provider = "postgresql"` y el script `backend/scripts/prisma-local.mjs` genera
+  una copia ignorada por git (`schema.local.prisma`) con `sqlite`.
 
 ```bash
 cd backend
-npx prisma generate     # regenera el cliente después de tocar el schema
-npx prisma db push      # aplica el esquema a la base (local o remota)
-npx prisma studio        # explorar los datos
+# .env: DATABASE_URL="file:./dev.db"
+npm run db:local        # prisma generate + db push contra SQLite (copia local)
+node prisma/seed.js     # datos DEMO de prisma/seed-data (1 promotor, 2 clientes, 4 sucursales, 3 productos)
 ```
+
+> Datos DEMO: los CSV de `backend/prisma/seed-data` son de ejemplo (no reales). En
+> producción el catálogo viene del Google Sheet (`CATALOG_SOURCE=sheet`) y los CSV
+> reales van como *Secret Files* (`SEED_DIR`).
 
 ## Metas de venta
 

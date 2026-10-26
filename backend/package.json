@@ -9,6 +9,7 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "db:generate": "prisma generate",
+    "db:local": "node scripts/prisma-local.mjs generate && node scripts/prisma-local.mjs db push --skip-generate",
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio"

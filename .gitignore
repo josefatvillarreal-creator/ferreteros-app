@@ -28,3 +28,5 @@ node_modules/
 # Artefactos locales
 backend/prisma/test*.db
 .superpowers/
+
+backend/prisma/schema.local.prisma

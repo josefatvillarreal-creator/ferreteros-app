@@ -1,0 +1,5 @@
+Num,ClienteID,Sucursal,Dirección,Latitud,Longitud,Estado
+1001,c1,Demo Centro Morelia,Av. Madero 100,19.7008,-101.1844,Michoacán
+1002,c1,Demo Norte Morelia,Av. Solidaridad 200,19.7300,-101.1800,Michoacán
+1003,c2,Demo Sur Morelia,Periférico Sur 300,19.6700,-101.2100,Michoacán
+1004,c2,Demo Poniente Morelia,Av. Camelinas 400,19.7050,-101.2400,Michoacán

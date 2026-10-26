@@ -1,89 +1,62 @@
-// Semilla desde los CSV reales de Protexa.
-//  - Promotores.csv (UTF-8, coma): id, nombre, ubicacion, supervisor, contraseña.
+// Semilla desde CSV (DEMO en prisma/seed-data; en producción, la carpeta SEED_DIR).
+//  - Promotores.csv: ID, Nombre, Ubicación, Supervisor, Estado, Contraseña.
 //    La contraseña se HASHEA con bcrypt; nunca se guarda/loguea en claro.
-//  - Tiendas.csv (Latin-1/CP1252, punto y coma): num, nombre, lat, lng.
-//    Catálogo GLOBAL de tiendas (la cercanía se resuelve en GET /api/sucursales).
+//  - Clientes.csv / Sucursales.csv / Productos.csv: mismo formato que las
+//    pestañas del Sheet (se leen con los MISMOS parsers que la sincronización).
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
+import { parseCsv } from "../src/csvRows.js";
+import { parseClientes, parseProductos, parseSucursales } from "../src/catalogParsers.js";
 
 const prisma = new PrismaClient();
 const BCRYPT_ROUNDS = 10;
 
-const promotersPath = process.env.SEED_CSV_PATH
-  ? process.env.SEED_CSV_PATH
-  : fileURLToPath(new URL("../../Promotores.csv", import.meta.url));
-const storesPath = process.env.SEED_STORES_CSV_PATH
-  ? process.env.SEED_STORES_CSV_PATH
-  : fileURLToPath(new URL("../../Tiendas.csv", import.meta.url));
+const seedDir = process.env.SEED_DIR
+  ? process.env.SEED_DIR
+  : fileURLToPath(new URL("./seed-data/", import.meta.url));
 
-function slugify(s) {
-  return String(s)
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "") // quita diacríticos combinados
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
+const norm = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
 
 // Lee un CSV con la codificación correcta (UTF-8; si los bytes no son UTF-8
-// válido, cae a Latin-1/Windows-1252, para no romper acentos como "Revolución").
-function readTextSmart(path) {
+// válido, cae a Latin-1/Windows-1252, para no romper acentos).
+function readRows(name) {
+  const path = join(seedDir, name);
+  if (!existsSync(path)) {
+    console.warn(`AVISO: no se encontró ${path} — se omite.`);
+    return [];
+  }
   const buf = readFileSync(path);
+  let text;
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(buf);
+    text = new TextDecoder("utf-8", { fatal: true }).decode(buf);
   } catch {
-    return new TextDecoder("latin1").decode(buf);
+    text = new TextDecoder("latin1").decode(buf);
   }
+  return parseCsv(text);
 }
 
-// Detecta el separador (',' o ';') mirando la primera línea con contenido.
-function detectDelim(text) {
-  const line = text.split(/\r?\n/).find((l) => l.trim()) || "";
-  const semis = (line.match(/;/g) || []).length;
-  const commas = (line.match(/,/g) || []).length;
-  return semis > commas ? ";" : ",";
-}
-
-// --- Promotores (id, nombre, ubicacion, supervisor, contraseña) ------------
-function parsePromoters(text) {
-  const delim = detectDelim(text);
-  const rows = [];
-  for (const line of text.split(/\r?\n/)) {
-    if (!line.trim()) continue;
-    const cols = line.split(delim).map((c) => c.trim());
-    const [id, name, location, supervisor, password] = cols;
-    if (!id || !/^\d+$/.test(id)) continue; // salta encabezado / filas inválidas
-    if (!name || !password) continue;
-    rows.push({ id, name, location, supervisor, password });
+// Promotores: columnas por encabezado (id, nombre, ubicacion, supervisor, estado, contrasena).
+function parsePromoters(rows) {
+  const h = rows.findIndex((r) => r.map(norm).includes("id") && r.map(norm).includes("contrasena"));
+  if (h === -1) return [];
+  const cols = rows[h].map(norm);
+  const at = (...names) => cols.findIndex((c) => names.includes(c));
+  const [iId, iName, iLoc, iSup, iEstado, iPass] = [at("id"), at("nombre"), at("ubicacion"), at("supervisor"), at("estado"), at("contrasena")];
+  const out = [];
+  for (const r of rows.slice(h + 1)) {
+    const id = r[iId], name = r[iName], password = r[iPass];
+    if (!id || !name || !password) continue;
+    out.push({
+      id, name, password,
+      location: iLoc === -1 ? null : r[iLoc] || null,
+      supervisor: iSup === -1 ? null : r[iSup] || null,
+      estado: iEstado === -1 ? null : r[iEstado] || null,
+    });
   }
-  return rows;
-}
-
-// --- Tiendas (num, nombre, lat, lng) ---------------------------------------
-// Detección por CONTENIDO (no por posición): así funciona con ',' o ';', con o
-// sin columna vacía inicial, con o sin encabezado, y con tiendas sin número.
-function parseStores(text) {
-  const delim = detectDelim(text);
-  const numeric = (s) => /^-?\d+(\.\d+)?$/.test(s);
-  const rows = [];
-  for (const line of text.split(/\r?\n/)) {
-    if (!line.trim()) continue;
-    const cols = line.split(delim).map((c) => c.trim());
-    // Coordenadas = valores numéricos dentro del rango geográfico (|v| <= 180).
-    // Los números de tienda (4+ dígitos, > 180) quedan fuera automáticamente.
-    const coords = cols.filter((c) => numeric(c) && Math.abs(Number(c)) <= 180).map(Number);
-    if (coords.length < 2) continue; // encabezado o fila sin coordenadas → se salta
-    const [lat, lng] = coords; // lat y lng vienen en ese orden
-    if (!(lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180)) continue;
-    const num = cols.find((c) => /^\d{3,}$/.test(c)); // número de tienda (entero de 3+ dígitos)
-    const name = cols.find((c) => c && !numeric(c) && !/^(num.*|tienda|latitud|longitud)$/i.test(c));
-    if (!name) continue;
-    const id = num || slugify(name);
-    rows.push({ id, name, address: num ? `Tienda #${num}` : name, lat, lng });
-  }
-  return rows;
+  return out;
 }
 
 async function main() {
@@ -95,57 +68,44 @@ async function main() {
     return;
   }
 
-  // Promotores (tolerante a archivo ausente, p.ej. antes de subir el Secret File).
-  const promoters = existsSync(promotersPath)
-    ? parsePromoters(readTextSmart(promotersPath))
-    : [];
-  if (!promoters.length) console.warn(`AVISO: no se encontró/leyó ${promotersPath} — 0 promotores sembrados.`);
+  const skipped = [];
+
+  const promoters = parsePromoters(readRows("Promotores.csv"));
   const seen = new Set();
-  const dupPromoters = [];
   let promoterCount = 0;
-  for (const r of promoters) {
-    if (seen.has(r.id)) {
-      dupPromoters.push(r.id);
-      continue;
-    }
-    seen.add(r.id);
-    const passwordHash = await bcrypt.hash(r.password, BCRYPT_ROUNDS);
+  for (const p of promoters) {
+    if (seen.has(p.id)) { skipped.push(`Promotores: ID duplicado ${p.id}`); continue; }
+    seen.add(p.id);
+    const { password, ...fields } = p;
+    const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
     await prisma.promoter.upsert({
-      where: { id: r.id },
-      update: { name: r.name, location: r.location, supervisor: r.supervisor, password: passwordHash },
-      create: { id: r.id, name: r.name, location: r.location, supervisor: r.supervisor, password: passwordHash },
+      where: { id: p.id },
+      update: { ...fields, password: hash },
+      create: { ...fields, password: hash },
     });
     promoterCount++;
   }
 
-  // Tiendas (catálogo global). Tolerante a archivo ausente.
-  const stores = existsSync(storesPath) ? parseStores(readTextSmart(storesPath)) : [];
-  if (!stores.length) console.warn(`AVISO: no se encontró/leyó ${storesPath} — 0 tiendas sembradas.`);
-  const seenStores = new Set();
-  const dupStores = [];
-  let storeCount = 0;
-  for (const s of stores) {
-    if (seenStores.has(s.id)) {
-      dupStores.push(s.id);
-      continue;
-    }
-    seenStores.add(s.id);
-    await prisma.store.upsert({ where: { id: s.id }, update: s, create: s });
-    storeCount++;
+  const clientes = parseClientes(readRows("Clientes.csv"));
+  for (const c of clientes.items) await prisma.cliente.upsert({ where: { id: c.id }, update: c, create: c });
+  const productos = parseProductos(readRows("Productos.csv"));
+  for (const p of productos.items) await prisma.producto.upsert({ where: { id: p.id }, update: p, create: p });
+  const sucursales = parseSucursales(readRows("Sucursales.csv"), new Set(clientes.items.map((c) => c.id)));
+  for (const s of sucursales.items) await prisma.sucursal.upsert({ where: { id: s.id }, update: s, create: s });
+
+  for (const [tab, r] of [["Clientes", clientes], ["Productos", productos], ["Sucursales", sucursales]]) {
+    for (const s of r.skipped) skipped.push(`${tab} fila ${s.row}: ${s.reason}`);
   }
 
   console.log(
-    `Seed OK: ${promoterCount} promotores (bcrypt), ${storeCount} tiendas en el catálogo global.`
+    `Seed OK: ${promoterCount} promotores (bcrypt), ${clientes.items.length} clientes, ${sucursales.items.length} sucursales, ${productos.items.length} productos.`
   );
-  if (dupPromoters.length)
-    console.warn(`AVISO: IDs de promotor duplicados (se conservó el primero): ${[...new Set(dupPromoters)].join(", ")}`);
-  if (dupStores.length)
-    console.warn(`AVISO: números de tienda duplicados (se conservó el primero): ${[...new Set(dupStores)].join(", ")}`);
+  if (skipped.length) console.warn(`AVISO: ${skipped.length} fila(s) omitida(s):\n - ${skipped.join("\n - ")}`);
 }
 
 main()
   .catch((e) => {
-    console.error(e);
-    process.exit(1);
+    console.error("Seed falló:", e);
+    process.exitCode = 1;
   })
   .finally(() => prisma.$disconnect());
