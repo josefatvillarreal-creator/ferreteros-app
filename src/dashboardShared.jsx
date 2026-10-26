@@ -329,7 +329,6 @@ export function PromoterRow({ p, onClick, onEditGoal, hour12 = true, products = 
 }
 // Modal para fijar la meta SEMANAL personalizada (en unidades equivalentes)
 // de un promotor, como excepción al default de 30/semana. Solo lo abre
-// unidad equivalente) de un promotor, como excepción al default de 30/semana. Solo lo abre
 // el tablero de admin/gerente (ver el botón "Meta" en PromoterRow).
 // `onSave(meta)` recibe el número ya validado; el llamador hace la petición y
 // refresca.

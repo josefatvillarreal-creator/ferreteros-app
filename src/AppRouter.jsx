@@ -8,7 +8,7 @@
 //   maneja el login, la carga y todas las pantallas del promotor).
 //
 // Hacemos el corte AQUÍ (arriba de PromotoresApp) a propósito: así, cuando entra
-// un gerente o supervisor, NUNCA se montan los hooks del promotor (GPS, tiendas
+// un gerente o supervisor, NUNCA se montan los hooks del promotor (GPS, sucursales
 // cercanas, cola offline). Todos inician sesión con la misma pantalla de login
 // de PromotoresApp; al autenticarse, este router cambia de pantalla según el rol.
 import { useAuth } from "./auth/AuthProvider.jsx";

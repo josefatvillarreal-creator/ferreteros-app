@@ -21,7 +21,7 @@ import { COLORS, detectScheme, applyScheme } from "./theme.js";
 import {
   fmtMoney, fmtMoneyCompact, fmtNum, todayStamp, RANGE_OPTIONS, RANGE_LABELS, MEXICO_ESTADOS,
   bgTexture, Brand, NationalMap, BarChart, Kpi, ChartCard, PromoterRow, PanelHeader,
-  buildExportRows, downloadCsv, downloadXlsx,
+  buildExportHeaders, buildExportRows, downloadCsv, downloadXlsx, pieceCount,
 } from "./dashboardShared.jsx";
 import NotificationBell from "./NotificationBell.jsx";
 import PromoterProfile from "./PromoterProfile.jsx";
@@ -40,17 +40,17 @@ const ONBOARDING_STEPS_SUPERVISOR = [
   {
     icon: Target,
     title: "La meta de tu equipo",
-    body: "Cada promotor muestra su meta semanal (30 rollos-equivalentes por defecto, o la que le fije el administrador) y su avance de la semana.",
+    body: "Cada promotor muestra su meta semanal (30 unidades equivalentes por defecto, o la que le fije el administrador) y su avance de la semana.",
   },
   {
     icon: Bell,
     title: "Notificaciones de tu equipo",
-    body: "La campana te avisa cuando uno de tus promotores hace check-in (con la tienda y si llegó a tiempo) y cuando alcanza su meta de la semana.",
+    body: "La campana te avisa cuando uno de tus promotores hace check-in (con la sucursal y si llegó a tiempo) y cuando alcanza su meta de la semana.",
   },
   {
     icon: MapPin,
     title: "Perfil de cada promotor",
-    body: "Haz clic en un promotor (lista o mapa) para ver su historial de check-in/check-out y las tiendas a las que suele ir.",
+    body: "Haz clic en un promotor (lista o mapa) para ver su historial de check-in/check-out y las sucursales a las que suele ir.",
   },
 ];
 
@@ -89,8 +89,9 @@ export default function SupervisorDashboard() {
   // Fechas del rango "Personalizado…" (YYYY-MM-DD, del <input type="date">).
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-  // Rollos/cubetas: multi-select (no excluyentes) — ver ManagerDashboard.
-  const [unitFilter, setUnitFilter] = useState(() => new Set());
+  // Productos: multi-select (no excluyentes) — ver ManagerDashboard.
+  const [unitFilter, setUnitFilter] = useState(() => new Set()); // Set de productoId
+  const [cliente, setCliente] = useState("todos"); // "todos" | clienteId
   const toggleUnit = (u) => setUnitFilter((prev) => {
     const next = new Set(prev);
     next.has(u) ? next.delete(u) : next.add(u);
@@ -120,27 +121,28 @@ export default function SupervisorDashboard() {
   }, [load]);
 
   const promoters = summary?.promoters ?? [];
-  const totals = summary?.totals ?? { promoters: 0, sucursalesVisited: 0, rollos: 0, cubetas: 0, money: 0, checkedIn: 0, withoutSales: 0, rosterTotal: 0 };
-  const prices = summary?.prices ?? { rollo: 0, cubeta: 0 };
+  const totals = summary?.totals ?? { promoters: 0, sucursalesVisited: 0, pieces: 0, units: 0, money: 0, byProduct: {}, checkedIn: 0, withoutSales: 0, rosterTotal: 0 };
+  const products = summary?.products ?? [];
+  const byCliente = summary?.byCliente ?? [];
   const useMoney = totals.money > 0;
   // "En su lugar" = con check-in abierto AHORA MISMO, contra el total de
   // promotores de TU equipo (no solo los que tuvieron actividad en el rango).
-  const faltanEnTienda = Math.max(0, (totals.rosterTotal || 0) - totals.checkedIn);
-  const pctEnTienda = totals.rosterTotal > 0 ? Math.round((totals.checkedIn / totals.rosterTotal) * 100) : 0;
+  const faltanEnSucursal = Math.max(0, (totals.rosterTotal || 0) - totals.checkedIn);
+  const pctEnSucursal = totals.rosterTotal > 0 ? Math.round((totals.checkedIn / totals.rosterTotal) * 100) : 0;
 
   // Los 32 estados de México siempre completos en el dropdown (no solo los
   // que tengan actividad en el rango actual) — igual que ManagerDashboard.
   const estados = MEXICO_ESTADOS;
 
   // Promotores de tu equipo SIN check-in abierto ahora mismo — para el
-  // listado que abre el KPI "Faltan en tienda". Ver ManagerDashboard.
+  // listado que abre el KPI "Faltan en sucursal". Ver ManagerDashboard.
   const missingPromoters = useMemo(() => {
     const checkedInIds = new Set(promoters.filter((p) => p.status === "in").map((p) => p.id));
     return (summary?.roster ?? [])
       .filter((r) => !checkedInIds.has(r.id))
       .map((r) => ({
         id: r.id, name: r.name, estado: r.estado, supervisor: null,
-        rollos: 0, cubetas: 0, money: 0, status: "missing",
+        pieces: 0, units: 0, byProduct: {}, money: 0, status: "missing",
         checkInTime: null, checkOutTime: null, goal: null,
         lat: null, lng: null, visits: [],
       }));
@@ -149,25 +151,26 @@ export default function SupervisorDashboard() {
   const filtered = useMemo(() => {
     let list = segment === "faltantes" ? missingPromoters : promoters;
     if (estado !== "todos") list = list.filter((p) => (p.estado || "Sin estado") === estado);
-    if (segment === "con") list = list.filter((p) => p.rollos + p.cubetas > 0);
-    else if (segment === "sin") list = list.filter((p) => p.rollos + p.cubetas === 0);
+    if (cliente !== "todos") list = list.filter((p) => (p.visits ?? []).some((v) => (v.clienteId ?? "sin-cliente") === cliente));
+    if (segment === "con") list = list.filter((p) => p.pieces > 0);
+    else if (segment === "sin") list = list.filter((p) => p.pieces === 0);
     else if (segment === "meta") list = list.filter((p) => p.goal?.reached);
     else if (segment === "in") list = list.filter((p) => p.status === "in");
-    if (unitFilter.size > 0) list = list.filter((p) => [...unitFilter].some((u) => p[u] > 0));
+    if (unitFilter.size > 0) list = list.filter((p) => pieceCount(p, unitFilter) > 0);
     if (query.trim()) {
       const q = query.trim().toLowerCase();
       list = list.filter((p) => (p.name || "").toLowerCase().includes(q) || String(p.id).includes(q));
     }
     return list;
-  }, [promoters, missingPromoters, estado, segment, query, unitFilter]);
+  }, [promoters, missingPromoters, estado, cliente, segment, query, unitFilter]);
 
   const metric = unitFilter.size > 0
-    ? (p) => [...unitFilter].reduce((sum, u) => sum + (p[u] || 0), 0)
-    : (p) => (useMoney ? p.money : p.rollos + p.cubetas);
+    ? (p) => pieceCount(p, unitFilter)
+    : (p) => (useMoney ? p.money : p.units);
   const metricFmt = unitFilter.size > 0 ? fmtNum : (useMoney ? fmtMoney : fmtNum);
-  const UNIT_LABELS = { rollos: "rollos", cubetas: "cubetas" };
+  const productName = (id) => products.find((p) => p.id === id)?.nombre ?? id;
   const unitLabel = unitFilter.size > 0
-    ? [...unitFilter].map((u) => UNIT_LABELS[u]).join(" + ")
+    ? [...unitFilter].map(productName).join(" + ")
     : (useMoney ? "dinero" : "unidades");
   const topData = useMemo(
     () => [...filtered].sort((a, b) => metric(b) - metric(a)).slice(0, 8).map((p) => ({ label: p.name, value: metric(p) })),
@@ -181,26 +184,25 @@ export default function SupervisorDashboard() {
     }
     return [...m.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
   }, [filtered, useMoney, unitFilter]);
-  const composicion = useMoney
-    ? [
-        { label: "Rollos ($)", value: totals.rollos * prices.rollo },
-        { label: "Cubetas ($)", value: totals.cubetas * prices.cubeta },
-      ]
-    : [
-        { label: "Rollos", value: totals.rollos },
-        { label: "Cubetas", value: totals.cubetas },
-      ];
+  const composicion = products.map((pr) => {
+    const qty = totals.byProduct?.[pr.id] || 0;
+    return useMoney ? { label: `${pr.nombre} ($)`, value: qty * pr.precio } : { label: pr.nombre, value: qty };
+  });
+  const clienteData = byCliente
+    .map((c) => ({ label: c.cliente, value: useMoney ? c.money : c.units }))
+    .slice(0, 8);
   const metasAlcanzadas = promoters.filter((p) => p.goal?.reached).length;
 
   const segments = [
     { key: "todos", label: "Todos" },
     { key: "con", label: "Con ventas" },
     { key: "sin", label: "Sin ventas" },
-    { key: "in", label: "En tienda" },
+    { key: "in", label: "En sucursal" },
     { key: "meta", label: "Con meta alcanzada" },
   ];
 
-  const exportRows = useMemo(() => buildExportRows(filtered), [filtered]);
+  const exportHeaders = useMemo(() => buildExportHeaders(products), [products]);
+  const exportRows = useMemo(() => buildExportRows(filtered, products), [filtered, products]);
   const exportFilename = (ext) => `mi-equipo-${range}-${todayStamp()}.${ext}`;
 
   const isMax = panelMode === "max";
@@ -282,32 +284,30 @@ export default function SupervisorDashboard() {
       <div style={{ display: "flex", gap: 8, padding: "10px 12px", overflowX: "auto", flexShrink: 0, borderBottom: `1px solid ${COLORS.border}` }}>
         <Kpi
           icon={DollarSign} label={`Vendido · ${RANGE_LABELS[range]}`} value={fmtMoneyCompact(totals.money)} accent
-          tooltip={`${fmtMoney(totals.money)} · suma en dinero de todas las ventas (rollos + cubetas) de tu equipo en este período.`}
+          tooltip={`${fmtMoney(totals.money)} · suma en dinero de todas las ventas de todos los productos de tu equipo en este período.`}
           onClick={() => setSegment("con")} active={segment === "con"}
         />
-        <Kpi
-          icon={TrendingUp} label="Rollos" value={fmtNum(totals.rollos)}
-          tooltip="Total de rollos vendidos por tu equipo en este período. Clic para filtrar — puedes combinarlo con cubetas."
-          onClick={() => toggleUnit("rollos")} active={unitFilter.has("rollos")}
-        />
-        <Kpi
-          icon={TrendingUp} label="Cubetas" value={fmtNum(totals.cubetas)}
-          tooltip="Total de cubetas vendidas por tu equipo en este período. Clic para filtrar — puedes combinarlo con rollos."
-          onClick={() => toggleUnit("cubetas")} active={unitFilter.has("cubetas")}
-        />
+        {products.map((pr) => (
+          <Kpi
+            key={pr.id}
+            icon={TrendingUp} label={pr.nombre} value={fmtNum(totals.byProduct?.[pr.id] || 0)}
+            tooltip={`Total de ${pr.nombre} vendido por tu equipo en este período. Clic para filtrar a quien vendió ${pr.nombre} — puedes combinarlo con otros productos.`}
+            onClick={() => toggleUnit(pr.id)} active={unitFilter.has(pr.id)}
+          />
+        ))}
         <Kpi
           icon={Users} label="Mi equipo activo" value={fmtNum(totals.promoters)}
           tooltip="Promotores de tu equipo con al menos una visita registrada en este período."
           onClick={() => setSegment("todos")} active={segment === "todos"}
         />
         <Kpi
-          icon={MapPin} label="En tienda" value={fmtNum(totals.checkedIn)}
+          icon={MapPin} label="En sucursal" value={fmtNum(totals.checkedIn)}
           tooltip="Promotores de tu equipo que ya hicieron check-in y siguen sin hacer check-out."
           onClick={() => setSegment("in")} active={segment === "in"}
         />
         <Kpi
-          icon={Store} label="Tiendas" value={fmtNum(totals.sucursalesVisited)}
-          tooltip="Número de tiendas distintas visitadas por tu equipo en este período."
+          icon={Store} label="Sucursales" value={fmtNum(totals.sucursalesVisited)}
+          tooltip="Número de sucursales distintas visitadas por tu equipo en este período."
           onClick={() => setSegment("todos")}
         />
         <Kpi
@@ -316,12 +316,12 @@ export default function SupervisorDashboard() {
           onClick={() => setSegment("meta")} active={segment === "meta"}
         />
         <Kpi
-          icon={UserX} label="Faltan en tienda" value={fmtNum(faltanEnTienda)}
+          icon={UserX} label="Faltan en sucursal" value={fmtNum(faltanEnSucursal)}
           tooltip="Promotores de tu equipo que AHORA MISMO no tienen un check-in abierto (sobre el total de tu equipo, no solo los activos en este período). Clic para ver quiénes son."
           onClick={() => setSegment("faltantes")} active={segment === "faltantes"}
         />
         <Kpi
-          icon={UserCheck} label="% en su lugar" value={`${pctEnTienda}%`}
+          icon={UserCheck} label="% en su lugar" value={`${pctEnSucursal}%`}
           tooltip={`${fmtNum(totals.checkedIn)} de ${fmtNum(totals.rosterTotal)} promotores de tu equipo tienen un check-in abierto ahora mismo.`}
           onClick={() => setSegment("in")} active={segment === "in"}
         />
@@ -330,7 +330,7 @@ export default function SupervisorDashboard() {
       {/* Cuerpo: mapa + panel */}
       <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
         <div style={{ position: "absolute", inset: 0 }}>
-          <NationalMap promoters={filtered} onSelect={(p) => setProfileId(p.id)} />
+          <NationalMap promoters={filtered} onSelect={(p) => setProfileId(p.id)} products={products} />
         </div>
 
         {error && (
@@ -385,9 +385,20 @@ export default function SupervisorDashboard() {
                     );
                   })}
                   <select
+                    value={cliente}
+                    onChange={(e) => setCliente(e.target.value)}
+                    title="Mostrar solo a los promotores que visitaron este cliente"
+                    style={{ marginLeft: "auto", padding: "6px 10px", borderRadius: 8, border: `1px solid ${COLORS.border}`, background: COLORS.surface2, color: COLORS.text, fontSize: 12, fontWeight: 600, cursor: "pointer", maxWidth: 160 }}
+                  >
+                    <option value="todos">Todos los clientes</option>
+                    {byCliente.map((c) => (
+                      <option key={c.clienteId ?? "sin-cliente"} value={c.clienteId ?? "sin-cliente"}>{c.cliente}</option>
+                    ))}
+                  </select>
+                  <select
                     value={estado}
                     onChange={(e) => setEstado(e.target.value)}
-                    style={{ marginLeft: "auto", padding: "6px 10px", borderRadius: 8, border: `1px solid ${COLORS.border}`, background: COLORS.surface2, color: COLORS.text, fontSize: 12, fontWeight: 600, cursor: "pointer", maxWidth: 160 }}
+                    style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${COLORS.border}`, background: COLORS.surface2, color: COLORS.text, fontSize: 12, fontWeight: 600, cursor: "pointer", maxWidth: 160 }}
                   >
                     <option value="todos">Todos los estados</option>
                     {estados.map((e) => (
@@ -426,7 +437,7 @@ export default function SupervisorDashboard() {
                     )}
                     <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
                       <button
-                        onClick={() => downloadCsv(exportRows, exportFilename("csv"))}
+                        onClick={() => downloadCsv(exportHeaders, exportRows, exportFilename("csv"))}
                         disabled={!exportRows.length}
                         title="Descargar CSV de lo que se está viendo"
                         style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "7px 11px", color: exportRows.length ? COLORS.text : COLORS.textMuted, fontSize: 12, fontWeight: 600, cursor: exportRows.length ? "pointer" : "default", opacity: exportRows.length ? 1 : 0.5 }}
@@ -434,7 +445,7 @@ export default function SupervisorDashboard() {
                         <Download size={13} /> CSV
                       </button>
                       <button
-                        onClick={() => downloadXlsx(exportRows, exportFilename("xlsx"))}
+                        onClick={() => downloadXlsx(exportHeaders, exportRows, exportFilename("xlsx"))}
                         disabled={!exportRows.length}
                         title="Descargar Excel de lo que se está viendo"
                         style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "7px 11px", color: exportRows.length ? COLORS.text : COLORS.textMuted, fontSize: 12, fontWeight: 600, cursor: exportRows.length ? "pointer" : "default", opacity: exportRows.length ? 1 : 0.5 }}
@@ -448,6 +459,9 @@ export default function SupervisorDashboard() {
                   </ChartCard>
                   <ChartCard title={`Ventas por estado (${unitLabel})`}>
                     <BarChart data={estadoData} color={COLORS.success} format={metricFmt} />
+                  </ChartCard>
+                  <ChartCard title={`Ventas por cliente (${useMoney ? "dinero" : "unidades"})`}>
+                    <BarChart data={clienteData} color={COLORS.accentText} format={useMoney ? fmtMoney : fmtNum} />
                   </ChartCard>
                   <ChartCard title="Composición del período">
                     <BarChart data={composicion} color={COLORS.accentText} format={useMoney ? fmtMoney : fmtNum} />
@@ -468,7 +482,7 @@ export default function SupervisorDashboard() {
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {filtered.map((p) => (
-                    <PromoterRow key={p.id} p={p} onClick={(pp) => setProfileId(pp.id)} />
+                    <PromoterRow key={p.id} p={p} onClick={(pp) => setProfileId(pp.id)} products={products} />
                   ))}
                 </div>
               )}
