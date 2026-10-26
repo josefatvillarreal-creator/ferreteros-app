@@ -516,7 +516,12 @@ export default function PromotoresApp() {
   const compCaptureRef = useRef(null); // cámara del sistema (respaldo si no abre la integrada)
   const [cameraFor, setCameraFor] = useState(null); // cámara integrada abierta: "visit" | "competition" | null
   const MAX_COMP_FOTOS = 5;
-  const [productos, setProductos] = useState([]); // catálogo activo [{ id, nombre, unidad, orden }]
+  // Catálogo activo [{ id, nombre, unidad, orden }]. Se cachea en el dispositivo para poder
+  // capturar la salida aun sin red; `productosError` distingue "no cargó" de "catálogo vacío".
+  const [productos, setProductos] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("productos_cache") || "[]"); } catch { return []; }
+  });
+  const [productosError, setProductosError] = useState(false);
   const [cantidades, setCantidades] = useState({}); // { [productoId]: cantidad } del check-out en curso
   const [photo, setPhoto] = useState(null); // foto de check-in (Base64), obligatoria
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -808,15 +813,24 @@ export default function PromotoresApp() {
   }, [status]);
 
   // Catálogo de productos ACTIVOS: uno de los campos del reporte del día por cada uno.
+  // Se pide al autenticarse y de nuevo al abrir la hoja de salida si no se pudo cargar.
+  const loadProductos = useCallback(async (signal) => {
+    try {
+      const data = await api.productos(signal);
+      const list = data?.productos ?? [];
+      setProductos(list);
+      setProductosError(false);
+      try { localStorage.setItem("productos_cache", JSON.stringify(list)); } catch { /* sin almacenamiento: no pasa nada */ }
+    } catch (e) {
+      if (e?.name !== "AbortError") setProductosError(true);
+    }
+  }, []);
   useEffect(() => {
     if (status !== "authed") return;
     const ctrl = new AbortController();
-    api
-      .productos(ctrl.signal)
-      .then((data) => setProductos(data?.productos ?? []))
-      .catch(() => {});
+    loadProductos(ctrl.signal);
     return () => ctrl.abort();
-  }, [status]);
+  }, [status, loadProductos]);
 
   // GPS REAL únicamente (sin modo simulación). Observa la ubicación del
   // dispositivo mientras se está en la pantalla de una sucursal.
@@ -1438,7 +1452,7 @@ export default function PromotoresApp() {
 
               {isCheckedIn && (
                 <button
-                  onClick={() => setShowSheet(true)}
+                  onClick={() => { setShowSheet(true); if (productosError || productos.length === 0) loadProductos(); }}
                   disabled={!gpsCoords}
                   style={{
                     width: "100%", marginTop: 20, padding: "14px 0", borderRadius: 12, border: "none",
@@ -1504,7 +1518,13 @@ export default function PromotoresApp() {
                   onChange={(v) => setCantidades((c) => ({ ...c, [p.id]: v }))}
                 />
               ))}
-              {productos.length === 0 && (
+              {productos.length === 0 && productosError && (
+                <p style={{ fontSize: 12.5, color: COLORS.danger, margin: "12px 0 0", lineHeight: 1.5 }}>
+                  No se pudo cargar la lista de productos. Revisa tu conexión e inténtalo de nuevo; no confirmes la salida sin ella o se registrará sin ventas.{" "}
+                  <button onClick={() => loadProductos()} style={{ background: "none", border: "none", color: COLORS.accentText, fontWeight: 700, cursor: "pointer", padding: 0 }}>Reintentar</button>
+                </p>
+              )}
+              {productos.length === 0 && !productosError && (
                 <p style={{ fontSize: 12.5, color: COLORS.textMuted, margin: "12px 0 0" }}>
                   Aún no hay productos configurados; puedes registrar la salida sin cantidades.
                 </p>
@@ -1527,12 +1547,12 @@ export default function PromotoresApp() {
                 </button>
                 <button
                   onClick={handleConfirmCheckout}
-                  disabled={!gpsCoords || busy}
+                  disabled={!gpsCoords || busy || (productosError && productos.length === 0)}
                   style={{
                     flex: 2, padding: "12px 0", borderRadius: 10, border: "none",
                     background: gpsCoords ? COLORS.success : COLORS.surface2,
                     color: gpsCoords ? COLORS.onSuccess : COLORS.textMuted,
-                    fontFamily: "Inter", fontWeight: 600, fontSize: 14, cursor: gpsCoords && !busy ? "pointer" : "not-allowed",
+                    fontFamily: "Inter", fontWeight: 600, fontSize: 14, cursor: gpsCoords && !busy && !(productosError && productos.length === 0) ? "pointer" : "not-allowed",
                   }}
                 >
                   {busy ? "Confirmando…" : "Confirmar salida"}
@@ -1797,7 +1817,7 @@ export default function PromotoresApp() {
                             </div>
                           </div>
                           <div style={{ textAlign: "right", flexShrink: 0, color: COLORS.accentText, fontFamily: "JetBrains Mono", fontWeight: 800, fontSize: 13 }}>
-                            {ordenarItems(v.items ?? []).map((it) => `${it.cantidad} ${productoNombre(it.productoId)}`).join(" · ") || "Sin ventas"}
+                            {ordenarItems(v.items ?? []).map((it) => `${it.cantidad} ${it.nombre ?? productoNombre(it.productoId)}`).join(" · ") || "Sin ventas"}
                           </div>
                         </div>
                       ))}

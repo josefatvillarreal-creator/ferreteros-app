@@ -35,23 +35,26 @@ desarrollen este proyecto):
 
 1. Google Cloud Console → crear un **Service Account** → generar clave **JSON**.
 2. Habilitar la **Google Sheets API** en ese proyecto de Google Cloud.
-3. Abrir el Sheet "BBDD Promotores" → **Compartir** → agregar el `client_email`
+3. Abrir el Sheet nuevo **"BBDD Ferreteros"** (NO el de promotoría) → **Compartir** → agregar el `client_email`
    del Service Account como **Editor**.
 4. Guardar el JSON en `backend/credentials/service-account.json` (está en
    `.gitignore`; **nunca** se sube) y apuntar `GOOGLE_SERVICE_ACCOUNT_KEY_FILE`
    ahí, o pegar el JSON completo en una línea en `GOOGLE_SERVICE_ACCOUNT_JSON`.
 
-Base de datos local:
+Base de datos local (SQLite, sin tocar `schema.prisma`):
 
 ```bash
-npx prisma generate
-npx prisma db push       # crea backend/prisma/dev.db (SQLite)
-npm run dev               # http://localhost:8080
+cd backend
+npm run db:local         # prisma generate + db push contra SQLite (backend/prisma/dev.db)
+node prisma/seed.js      # datos DEMO (1 promotor, 2 clientes, 4 sucursales, 3 productos)
+npm run dev              # http://localhost:8080
 ```
 
-> `backend/prisma/schema.prisma` tiene `provider = "sqlite"` en tu copia local
-> a propósito (git no lo sincroniza, ver la nota de `skip-worktree` en
-> [README.md](README.md#base-de-datos-prisma)). No lo cambies a mano.
+> `backend/prisma/schema.prisma` se versiona con `provider = "postgresql"` (lo
+> que despliega Render). `npm run db:local` genera una copia ignorada por git con
+> SQLite: **no edites `schema.prisma` a mano** (ver [README.md](README.md#base-de-datos-prisma)).
+> Sin Sheet, define `AUTH_SOURCE=db`, `CATALOG_SOURCE=db` y, para entrar como
+> admin/gerente/supervisor, `DEV_USERS` (ver README, "Desarrollo local sin Google Sheet").
 
 ### 2. Frontend
 
@@ -140,18 +143,17 @@ quieran dos entornos, el patrón es el mismo de siempre, con ramas distintas:
 Cada uno tiene su **propia base de datos PostgreSQL** (Render las crea por
 separado); los datos de un servidor NO se mezclan con los del otro nunca solos.
 
-> Este repositorio local tiene el remoto `destination` apuntando al repo de
-> Andrea, y `origin` apuntando al repo personal del desarrollador
-> (`josefatvillarreal-creator/promotores`). Para que un cambio llegue a
-> CUALQUIERA de los dos servidores de Render, primero tiene que existir en el
-> repo de Andrea (`destination`/`upstream`) — un push a `origin` no dispara
-> nada ahí.
+> El repositorio de este proyecto es `josefatvillarreal-creator/ferreteros-app`
+> (remoto `origin`). **No uses los remotos ni los servicios de la app de
+> promotoría**: Ferreteros APP no comparte repo, base de datos, Sheet ni servicio
+> de Render con ella. Render despliega lo que llegue a la rama conectada de
+> este repo.
 
 ### Promover código de pruebas → final
 
-1. En el repo de Andrea (GitHub): **Pull Request** de `pruebas` → `main`.
+1. En el repo de este proyecto (GitHub): **Pull Request** de `pruebas` → `main`.
    Revisar el diff, **Merge**.
-   - O por línea de comandos, si tienes acceso: `git fetch destination && git checkout main && git merge destination/pruebas && git push destination main`.
+   - O por línea de comandos, si tienes acceso: `git fetch origin && git checkout main && git merge origin/pruebas && git push origin main`.
 2. Render detecta el push a `main` (tiene `autoDeploy: true`, ver `render.yaml`)
    y arranca el deploy del servidor final **solo**, sin tocar nada más.
 3. Verificar en el dashboard de Render → servicio final → **Events/Deploys**
@@ -173,7 +175,7 @@ Render no las copia solo de un servicio a otro.
 ### Primer despliegue de un servicio nuevo (Blueprint)
 
 1. `https://render.com` → **New +** → **Blueprint** → conectar el repo →
-   Render detecta `render.yaml` y muestra el servicio `promotores` (plan
+   Render detecta `render.yaml` y muestra el servicio `ferreteros-app` (plan
    Free) → **Apply**.
 2. Primer build (unos minutos). Al terminar: `https://<nombre>.onrender.com`.
 3. En este primer arranque **no hay datos todavía** (falta configurar Sheets,
@@ -246,7 +248,7 @@ adelante se necesita que llegue exactamente, por ejemplo, cada lunes 8am:
 
 ---
 
-## Backup diario del Google Sheet ("BBDD Promotores")
+## Backup diario del Google Sheet ("BBDD Ferreteros")
 
 **No vive en Render ni en el backend** — es un **Google Apps Script**
 vinculado directamente al Sheet (Extensiones → Apps Script), con un trigger
@@ -255,7 +257,7 @@ infraestructura de Google (gratis, no depende de que el backend esté
 despierto, no necesita un Cron Job nuevo de Render).
 
 - Todos los días entre **8pm y 9pm hora de México**, copia el Sheet completo
-  a la carpeta de Drive **"Backup"** con el nombre `BBDD Promotores - YYYY-MM-DD`.
+  a la carpeta de Drive **"Backup"** con el nombre `BBDD Ferreteros - YYYY-MM-DD`.
 - El script evita duplicar si el trigger llegara a dispararse dos veces el
   mismo día (revisa si ya existe un archivo con ese nombre en la carpeta
   antes de copiar).

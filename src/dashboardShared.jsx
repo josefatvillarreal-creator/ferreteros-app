@@ -393,9 +393,10 @@ export function buildExportHeaders(products = []) {
 }
 
 // Una fila (arreglo alineado con buildExportHeaders) por visita de cada promotor.
-export function buildExportRows(promoters, products = [], hour12 = true) {
+// `clienteId` ("todos" = sin filtro) deja solo las visitas de ese cliente, igual que el filtro del tablero.
+export function buildExportRows(promoters, products = [], hour12 = true, clienteId = "todos") {
   return promoters.flatMap((p) =>
-    (p.visits ?? []).map((v) => {
+    (p.visits ?? []).filter((v) => clienteId === "todos" || (v.clienteId ?? "sin-cliente") === clienteId).map((v) => {
       const qty = new Map((v.items ?? []).map((i) => [i.productoId, i.cantidad]));
       return [
         p.id,

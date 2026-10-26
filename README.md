@@ -215,6 +215,11 @@ backend (`[catalogSync] N fila(s) omitida(s)`, con pestaña y número de fila):
 - **Num** vacío o repetido (gana la primera fila): se omite.
 - Producto con equivalencia/precio inválidos: se omite. `Activo = NO` lo oculta del
   formulario de check-out pero conserva sus ventas en historial, metas y tableros.
+- Un producto o una sucursal que **desaparece de su pestaña** (o cuya fila queda
+  inválida, p. ej. sin coordenadas) se **desactiva** en la siguiente sincronización:
+  deja de salir en el formulario / en las listas y no permite check-in, pero conserva
+  su historial; si la fila vuelve, se reactiva. Esto solo ocurre si la pestaña se leyó
+  bien y trae al menos una fila válida.
 - Si el Sheet no responde o una pestaña está vacía, se conserva lo ya
   sincronizado; `/api/sucursales` responde `[]` (no 500).
 

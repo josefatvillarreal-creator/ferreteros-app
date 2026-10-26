@@ -248,7 +248,7 @@ export default function ManagerDashboard() {
   // hour12=false: administrador ve horas en formato 24h (a diferencia de
   // supervisor, que se queda en 12h por default).
   const exportHeaders = useMemo(() => buildExportHeaders(products), [products]);
-  const exportRows = useMemo(() => buildExportRows(filtered, products, false), [filtered, products]);
+  const exportRows = useMemo(() => buildExportRows(filtered, products, false, cliente), [filtered, products, cliente]);
   const exportFilename = (ext) => `promotores-${range}-${todayStamp()}.${ext}`;
 
   // --- Layout del panel -----------------------------------------------------

@@ -202,7 +202,7 @@ export default function SupervisorDashboard() {
   ];
 
   const exportHeaders = useMemo(() => buildExportHeaders(products), [products]);
-  const exportRows = useMemo(() => buildExportRows(filtered, products), [filtered, products]);
+  const exportRows = useMemo(() => buildExportRows(filtered, products, true, cliente), [filtered, products, cliente]);
   const exportFilename = (ext) => `mi-equipo-${range}-${todayStamp()}.${ext}`;
 
   const isMax = panelMode === "max";

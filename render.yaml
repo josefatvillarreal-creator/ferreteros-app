@@ -30,6 +30,9 @@ services:
       # diagnosticable.
       - key: NODE_OPTIONS
         value: "--max-old-space-size=400"
+      # Producción: entre otras cosas, desactiva DEV_USERS (usuarios de desarrollo sin Sheet).
+      - key: NODE_ENV
+        value: "production"
       # El servidor de Express sirve el frontend estático (mismo origen).
       - key: SERVE_STATIC
         value: "true"
