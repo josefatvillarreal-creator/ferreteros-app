@@ -2,7 +2,7 @@
 // Centro de notificaciones (campana) — admin/gerente y supervisor.
 // ---------------------------------------------------------------------------
 // Admin/gerente reciben las dirigidas a "admin" (check-in no aplica para
-// ellos; sí "meta de tienda alcanzada") + un "insight" en vivo con el Top 5 de
+// ellos; sí "meta de sucursal alcanzada") + un "insight" en vivo con el Top 5 de
 // vendedores del día (no se guarda en el Sheet: se recalcula cada vez).
 // Supervisor recibe las dirigidas a su propio ID (check-in de sus promotores
 // y "meta de promotor alcanzada").
@@ -50,7 +50,7 @@ router.get("/", async (req, res) => {
       const today = await getManagerSummary("today");
       insight = {
         label: "Top 5 vendedores de hoy",
-        top: today.promoters.slice(0, 5).map((p) => ({ id: p.id, name: p.name, money: p.money, units: p.rollos + p.cubetas })),
+        top: today.promoters.slice(0, 5).map((p) => ({ id: p.id, name: p.name, money: p.money, units: p.units })),
       };
     }
 

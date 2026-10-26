@@ -26,17 +26,17 @@ const CHECK_COOLDOWN_MS = 30 * 60 * 1000; // no repetir la consulta al Sheet má
 let lastCheckedAt = 0;
 
 function useMoney(summary) {
-  return summary.prices.rollo > 0 || summary.prices.cubeta > 0;
+  return summary.products.some((p) => p.precio > 0);
 }
 
 // Una línea compacta para el centro de notificaciones (campana).
 function summaryLine(summary, label) {
   const t = summary.totals;
   const money = useMoney(summary);
-  const monto = money ? fmtMoney(t.money) : `${fmtNum(t.rollos + t.cubetas)} unidades`;
+  const monto = money ? fmtMoney(t.money) : `${fmtNum(t.units)} unidades`;
   const top = summary.promoters[0];
-  const topText = top ? ` Top: ${top.name} (${money ? fmtMoney(top.money) : `${fmtNum(top.rollos + top.cubetas)} u.`}).` : "";
-  return `Resumen semanal${label ? ` de ${label}` : ""}: ${monto} vendido · ${t.promoters} activos · ${t.withoutSales} sin ventas · ${t.sucursalesVisited} tiendas.${topText}`;
+  const topText = top ? ` Top: ${top.name} (${money ? fmtMoney(top.money) : `${fmtNum(top.units)} u.`}).` : "";
+  return `Resumen semanal${label ? ` de ${label}` : ""}: ${monto} vendido · ${t.promoters} activos · ${t.withoutSales} sin ventas · ${t.sucursalesVisited} sucursales.${topText}`;
 }
 
 // Correo más detallado (tabla con cada promotor) — solo para admin.
@@ -45,14 +45,14 @@ function summaryHtml(summary, title) {
   const money = useMoney(summary);
   const rows = summary.promoters
     .slice(0, 15)
-    .map((p) => `<tr><td>${p.name}</td><td align="right">${fmtNum(p.rollos + p.cubetas)}</td><td align="right">${money ? fmtMoney(p.money) : "—"}</td></tr>`)
+    .map((p) => `<tr><td>${p.name}</td><td align="right">${fmtNum(p.units)}</td><td align="right">${money ? fmtMoney(p.money) : "—"}</td></tr>`)
     .join("");
   return `
     <h2 style="font-family:sans-serif">${title}</h2>
     <p style="font-family:sans-serif">
-      <b>Vendido:</b> ${money ? fmtMoney(t.money) : `${fmtNum(t.rollos + t.cubetas)} unidades`} ·
+      <b>Vendido:</b> ${money ? fmtMoney(t.money) : `${fmtNum(t.units)} unidades`} ·
       <b>Activos:</b> ${t.promoters} · <b>Sin ventas:</b> ${t.withoutSales} ·
-      <b>Tiendas visitadas:</b> ${t.sucursalesVisited}
+      <b>Sucursales visitadas:</b> ${t.sucursalesVisited}
     </p>
     <table cellpadding="6" style="border-collapse:collapse;width:100%;font-family:sans-serif">
       <thead><tr><th align="left">Promotor</th><th align="right">Unidades</th><th align="right">Vendido</th></tr></thead>

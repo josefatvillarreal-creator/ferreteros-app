@@ -300,7 +300,8 @@ export async function getManagerSummary(rangeKey = "today", { supervisorId, from
   }
 
   // La agregación pura vive en managerSummary.js (testeable sin base de datos).
-  const summary = summarizeVisitRows(rows, config.prices, range);
+  const productos = await prisma.producto.findMany();
+  const summary = summarizeVisitRows(rows, productos, range);
   await attachGoalProgress(summary);
   // Plantilla completa (todos los promotores registrados, o solo los de ESE
   // supervisor) — a diferencia de `summary.promoters`, que solo incluye a
