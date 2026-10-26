@@ -103,7 +103,7 @@ async function main() {
   for (const p of productos.items) await prisma.producto.upsert({ where: { id: p.id }, update: p, create: p });
   const clienteIds = new Set((await prisma.cliente.findMany({ select: { id: true } })).map((c) => c.id));
   const sucursales = safe("Sucursales", () => parseSucursales(readRows("Sucursales.csv"), clienteIds));
-  for (const s of sucursales.items) await prisma.sucursal.upsert({ where: { id: s.id }, update: s, create: s });
+  for (const s of sucursales.items) await prisma.sucursal.upsert({ where: { id: s.id }, update: { ...s, activa: true }, create: s });
 
   for (const [tab, r] of [["Clientes", clientes], ["Productos", productos], ["Sucursales", sucursales]]) {
     for (const s of r.skipped) skipped.push(`${tab} fila ${s.row}: ${s.reason}`);

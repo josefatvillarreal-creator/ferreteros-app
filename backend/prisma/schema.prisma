@@ -48,6 +48,7 @@ model Sucursal {
   lat       Float
   lng       Float
   estado    String? // ESTADO de México (columna "Estado" de la pestaña Sucursales). Usado por el filtro del gerente.
+  activa    Boolean       @default(true) // false = ya no está (o quedó inválida) en la pestaña Sucursales: no se lista ni permite check-in; conserva su historial
   visits    VisitRecord[]
 
   @@index([clienteId])

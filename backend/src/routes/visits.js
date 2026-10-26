@@ -45,7 +45,7 @@ router.get("/my-goal", async (req, res) => {
 // de sucursal y las coordenadas GPS reales que envía el cliente.
 async function assertInRange(promoterId, sucursalId, coords) {
   const sucursal = await getSucursal(sucursalId);
-  if (!sucursal) {
+  if (!sucursal || sucursal.activa === false) {
     const e = new Error("Sucursal no encontrada en el catálogo");
     e.status = 404;
     throw e;

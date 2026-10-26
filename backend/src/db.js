@@ -40,7 +40,7 @@ function flattenSucursal({ cliente, ...s }) {
 // Con CATALOG_SOURCE=sheet, primero sincroniza desde las pestañas del Sheet.
 export async function getAllSucursales() {
   if (config.catalogSource === "sheet") await ensureCatalogSynced();
-  const rows = await prisma.sucursal.findMany({ orderBy: { id: "asc" }, include: { cliente: true } });
+  const rows = await prisma.sucursal.findMany({ where: { activa: true }, orderBy: { id: "asc" }, include: { cliente: true } });
   return rows.map(flattenSucursal);
 }
 

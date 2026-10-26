@@ -86,3 +86,49 @@ test("getAllSucursales devuelve [] cuando no hay sucursales", async () => {
   await prisma.sucursal.deleteMany();
   assert.deepEqual(await getAllSucursales(), []);
 });
+
+test("un producto que ya no aparece en la pestaña Productos se desactiva (no se borra)", async () => {
+  await prisma.sucursal.deleteMany();
+  await syncCatalog({ clientes: CLIENTES, productos: PRODUCTOS, sucursales: [SUC_HEADER] });
+  await prisma.producto.updateMany({ data: { activo: true } });
+  const r = await syncCatalog({ clientes: CLIENTES, productos: [PRODUCTOS[0], PRODUCTOS[1]], sucursales: [SUC_HEADER] });
+  assert.deepEqual(r.skipped, []);
+  const rollo = await prisma.producto.findUnique({ where: { id: "rollo" } });
+  const cubeta = await prisma.producto.findUnique({ where: { id: "cubeta" } });
+  assert.equal(rollo.activo, true);
+  assert.equal(cubeta.activo, false);
+  assert.deepEqual((await getProductosActivos()).map((p) => p.id), ["rollo"]);
+});
+
+test("una sucursal que ya no aparece (o queda inválida) se desactiva y deja de listarse", async () => {
+  const dos = [
+    SUC_HEADER,
+    ["2001", "c1", "Una", "", "19.7", "-101.1", ""],
+    ["2002", "c1", "Dos", "", "19.8", "-101.2", ""],
+  ];
+  await syncCatalog({ clientes: CLIENTES, productos: PRODUCTOS, sucursales: dos });
+  assert.equal((await getAllSucursales()).length, 2);
+  // 2002 desaparece de la hoja; 2001 queda con coordenadas vacías (inválida) y la única válida es otra
+  const r = await syncCatalog({
+    clientes: CLIENTES,
+    productos: PRODUCTOS,
+    sucursales: [SUC_HEADER, ["2001", "c1", "Una", "", "", "", ""], ["2003", "c1", "Tres", "", "19.9", "-101.3", ""]],
+  });
+  assert.equal(r.sucursales, 1);
+  assert.deepEqual((await getAllSucursales()).map((s) => s.id), ["2003"]);
+  assert.equal((await getSucursal("2002")).activa, false);
+  // si vuelve a la hoja, se reactiva
+  await syncCatalog({ clientes: CLIENTES, productos: PRODUCTOS, sucursales: dos });
+  assert.deepEqual((await getAllSucursales()).map((s) => s.id).sort(), ["2001", "2002"]);
+  assert.equal((await getSucursal("2002")).activa, true);
+});
+
+test("una pestaña de sucursales con solo encabezado no desactiva el catálogo existente", async () => {
+  await syncCatalog({
+    clientes: CLIENTES,
+    productos: PRODUCTOS,
+    sucursales: [SUC_HEADER, ["3001", "c1", "Estable", "", "19.7", "-101.1", ""]],
+  });
+  await syncCatalog({ clientes: CLIENTES, productos: PRODUCTOS, sucursales: [SUC_HEADER] });
+  assert.equal((await getSucursal("3001")).activa, true);
+});

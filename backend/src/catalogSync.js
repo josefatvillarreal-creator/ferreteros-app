@@ -23,7 +23,9 @@ const TTL_MS = Number(process.env.CATALOG_CACHE_TTL_MS ?? 5 * 60 * 1000);
 // el error de una pestaña (p. ej. sin encabezado) se reporta con row 0.
 export async function syncCatalog(tabs, db = prisma) {
   const result = { clientes: 0, productos: 0, sucursales: 0, skipped: [] };
-  const run = async (tab, key, parse, upsert) => {
+  // `deactivateMissing(items)` se llama solo si la pestaña se leyó bien y trae
+  // al menos una fila válida: una pestaña vacía o caída NO desactiva el catálogo.
+  const run = async (tab, key, parse, upsert, deactivateMissing) => {
     let parsed;
     try {
       parsed = parse();
@@ -33,6 +35,7 @@ export async function syncCatalog(tabs, db = prisma) {
     }
     for (const it of parsed.items) await upsert(it);
     result[key] = parsed.items.length;
+    if (deactivateMissing && parsed.items.length > 0) await deactivateMissing(parsed.items.map((i) => i.id));
     for (const s of parsed.skipped) result.skipped.push({ tab, ...s });
   };
 
@@ -40,11 +43,15 @@ export async function syncCatalog(tabs, db = prisma) {
     db.cliente.upsert({ where: { id: c.id }, update: c, create: c })
   );
   await run("Productos", "productos", () => parseProductos(tabs.productos), (p) =>
-    db.producto.upsert({ where: { id: p.id }, update: p, create: p })
+    db.producto.upsert({ where: { id: p.id }, update: p, create: p }),
+    // Un producto borrado de la hoja se desactiva (no se borra: conserva su historial).
+    (ids) => db.producto.updateMany({ where: { id: { notIn: ids } }, data: { activo: false } })
   );
   const clienteIds = new Set((await db.cliente.findMany({ select: { id: true } })).map((c) => c.id));
   await run("Sucursales", "sucursales", () => parseSucursales(tabs.sucursales, clienteIds), (s) =>
-    db.sucursal.upsert({ where: { id: s.id }, update: s, create: s })
+    db.sucursal.upsert({ where: { id: s.id }, update: { ...s, activa: true }, create: s }),
+    // Una sucursal borrada de la hoja (o que quedó inválida) se desactiva: no se lista ni permite check-in.
+    (ids) => db.sucursal.updateMany({ where: { id: { notIn: ids } }, data: { activa: false } })
   );
   return result;
 }
