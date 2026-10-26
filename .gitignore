@@ -1,0 +1,30 @@
+node_modules
+dist
+.env
+.env.local
+*.log
+
+# Base de datos de promotores con contraseñas en claro: NUNCA versionar.
+Promotores.csv
+*.csv
+.DS_Store
+*.pub
+1234
+APP-PROMOTORES.git/
+ssh-keygen*
+backend/.env
+backend/credentials/
+nuevas-contrasenas-*.csv
+dev.db
+backend/prisma/dev.db
+node_modules/
+.env
+node_modules/
+
+# Datos DEMO y plantillas del Sheet (sin datos reales): sí se versionan.
+!backend/prisma/seed-data/*.csv
+!plantillas/*.csv
+
+# Artefactos locales
+backend/prisma/test*.db
+.superpowers/

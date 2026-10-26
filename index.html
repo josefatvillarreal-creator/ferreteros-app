@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es-MX">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Ferreteros Protexa</title>
+
+    <!-- PWA / móvil — color de barra según el tema del dispositivo -->
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1A1714" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FFFFFF" />
+    <meta name="description" content="Registro de visitas a clientes ferreteros" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="/icon-192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Ferreteros" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <style>
+      /* Fondo inicial según el esquema del dispositivo (evita el "flash"
+         oscuro antes de que React monte en modo claro). */
+      :root { color-scheme: light dark; }
+      html, body { margin: 0; height: 100%; background: #1A1714; }
+      @media (prefers-color-scheme: light) { html, body { background: #FFFFFF; } }
+      html { -webkit-text-size-adjust: 100%; }
+      body { overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; }
+      #root { min-height: 100dvh; }
+      /* Tipografía de marca: familia Helvetica en TODA la app. El selector
+         cubre todos los elementos para anular las fuentes puestas en los
+         estilos en línea (h1/h2/span con Space Grotesk, JetBrains Mono, etc.). */
+      body, body * {
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

@@ -1,0 +1,147 @@
+// Esquema de datos — App Promotores
+// Motor: en los servidores (Render) es PostgreSQL; en local es SQLite
+// (DATABASE_URL="file:./dev.db"). El provider de abajo debe COINCIDIR con el
+// motor real: por eso en local va "sqlite" (cambio gestionado con skip-worktree,
+// no se sube al repo). El resto del código (queries Prisma) es idéntico.
+//
+// NOTA (corrección 22/08/2026): el provider estaba corrupto ("postgresql{}][]"),
+// lo que rompía `prisma db push` / `generate`. Se corrigió a "sqlite" para el
+// entorno local. En los servidores debe ser "postgresql".
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Promoter {
+  id                 String              @id // ID de promotor (número de la BBDD)
+  name               String
+  location           String? // UBICACION
+  supervisor         String? // SUPERVISOR
+  estado             String? // ESTADO de México asignado al promotor (columna "Estado" de la pestaña Promotores). Fijo, no se deriva de las tiendas visitadas.
+  password           String // hash bcrypt de la contraseña (nunca en texto plano)
+  createdAt          DateTime            @default(now())
+  visits             VisitRecord[]
+  competitionReports CompetitionReport[]
+  trainingProgress   TrainingProgress[]
+  threads            Thread[]
+}
+
+// Catálogo GLOBAL de tiendas (sin asignación por promotor). La visibilidad se
+// resuelve por cercanía geográfica en tiempo real (GET /api/sucursales?lat&lng).
+model Store {
+  id      String        @id
+  name    String
+  address String
+  lat     Float
+  lng     Float
+  estado  String? // ESTADO de México (columna "Estado" de la pestaña Tiendas). Usado por el filtro del gerente.
+  visits  VisitRecord[]
+}
+
+model VisitRecord {
+  id               String    @id @default(uuid())
+  promoter         Promoter  @relation(fields: [promoterId], references: [id])
+  promoterId       String
+  store            Store     @relation(fields: [sucursalId], references: [id])
+  sucursalId          String
+  day              String // YYYY-MM-DD — 1 visita por promotor/tienda/día
+  status           String // "checked-in" | "checked-out"
+  checkInTime      DateTime?
+  checkInDistance  Int?
+  checkOutTime     DateTime?
+  checkOutDistance Int?
+  rollos           Int       @default(0)
+  cubetas          Int       @default(0)
+  galones          Int       @default(0)
+  photo            String? // foto de la visita en Base64 (data URL), persistida
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([promoterId, sucursalId, day])
+  @@index([promoterId, day])
+}
+
+// Reporte de acciones/estrategias de la competencia, capturado desde la
+// pantalla "Competencia" de la app del promotor. Las fotos se guardan aquí
+// (Base64, como VisitRecord.photo) — un Sheet no es buen lugar para binarios;
+// el Sheet solo recibe una fila-resumen (ver competitionSheet.js).
+model CompetitionReport {
+  id          String   @id @default(uuid())
+  promoter    Promoter @relation(fields: [promoterId], references: [id])
+  promoterId  String
+  marca       String
+  descripcion String
+  photos      String? // JSON: array de fotos en Base64 (data URL)
+  createdAt   DateTime @default(now())
+
+  @@index([promoterId])
+}
+
+// Progreso de Capacitación/Soporte de un promotor: una fila por pregunta de
+// quiz o tarjeta Leitner que ya intentó, para cada sección ("capacitacion" |
+// "soporte" — mismo tablero de contenido, distinto tema). `itemKey` es el
+// "Orden" de esa pregunta/tarjeta en la pestaña del Sheet correspondiente
+// (ver trainingSheet.js) — si el Sheet se reordena después, el progreso de
+// ese ítem podría desalinearse; es una limitación aceptada de tener el
+// contenido en un Sheet editable a mano, no de la base de datos.
+model TrainingProgress {
+  id         String   @id @default(uuid())
+  promoter   Promoter @relation(fields: [promoterId], references: [id])
+  promoterId String
+  seccion    String // "capacitacion" | "soporte"
+  tipo       String // "pregunta" | "flashcard"
+  itemKey    String // "Orden" de la pregunta/tarjeta en el Sheet
+  box        Int      @default(1) // Leitner (1-5): solo aplica a "flashcard"
+  attempts   Int      @default(0)
+  correct    Int      @default(0)
+  lastResult Boolean? // último intento: acertó/recordó o no
+  updatedAt  DateTime @updatedAt
+
+  @@unique([promoterId, seccion, tipo, itemKey])
+  @@index([promoterId, seccion])
+}
+
+// Hilo de comentarios estilo FORO (no chat en vivo): una lista de comentarios
+// con autor, fecha y hora que se va agregando y respondiendo. Sirve para dos
+// cosas, distinguidas por `kind`:
+//   - "supervisor": el chat de UN supervisor con la administración (un solo
+//     hilo por supervisor, `supervisorId` único = su ID de login en minúsculas).
+//   - "ticket": el seguimiento de UN reporte ("Reportar") de un promotor. El
+//     texto original del reporte es el primer comentario del hilo.
+// `lastCommentAt`/`lastAuthorRole` se guardan aquí (denormalizados) para poder
+// listar hilos y calcular "sin leer" sin tener que leer los comentarios.
+model Thread {
+  id             String          @id @default(uuid())
+  kind           String // "supervisor" | "ticket"
+  supervisorId   String?         @unique
+  promoter       Promoter?       @relation(fields: [promoterId], references: [id])
+  promoterId     String?
+  sucursal       String?
+  title          String?
+  status         String          @default("abierto") // "abierto" | "cerrado" (solo tickets)
+  lastCommentAt  DateTime        @default(now())
+  lastAuthorRole String          @default("")
+  createdAt      DateTime        @default(now())
+  comments       ThreadComment[]
+
+  @@index([kind, lastCommentAt])
+  @@index([promoterId, lastCommentAt])
+}
+
+model ThreadComment {
+  id         String   @id @default(uuid())
+  thread     Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  threadId   String
+  authorId   String // ID de login de quien escribe (promotor, supervisor o admin)
+  authorName String
+  authorRole String // "promotor" | "supervisor" | "admin" | "gerente"
+  text       String
+  createdAt  DateTime @default(now())
+
+  @@index([threadId, createdAt])
+}

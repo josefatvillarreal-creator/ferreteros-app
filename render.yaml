@@ -1,0 +1,69 @@
+# Render Blueprint — despliega la app (frontend + API) + una base de datos
+# PostgreSQL gratuita. Render sirve HTTPS automático en https://<nombre>.onrender.com
+# (necesario para el GPS en los teléfonos) y despliega desde GitHub.
+
+# Base de datos PostgreSQL gratuita gestionada por Render.
+databases:
+  - name: ferreteros-db
+    plan: free
+
+services:
+  - type: web
+    name: ferreteros-app
+    runtime: node
+    plan: free
+    # Construye el frontend (Vite) y prepara el backend (Prisma).
+    buildCommand: npm install && npm run build && cd backend && npm install && npx prisma generate
+    # Sincroniza el esquema con Postgres (db push), siembra (idempotente) y arranca.
+    startCommand: cd backend && npx prisma db push --skip-generate && node prisma/seed.js && node src/server.js
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # El plan "free" de Render da 512 MB de RAM; si el proceso se pasa, Render
+      # lo mata con SIGKILL sin aviso (así se cayó el servicio el 23 de
+      # septiembre). --max-old-space-size=400 le pone a V8 un techo MENOR a esos
+      # 512 MB (dejando margen para memoria fuera del heap de JS: el motor
+      # nativo de Prisma, buffers, etc.) — así, si algún día se vuelve a
+      # acercar al límite, V8 tira su propio error de "heap out of memory" CON
+      # stack trace en el log, en vez de un SIGKILL mudo del sistema operativo.
+      # No evita quedarse sin memoria; solo hace que, si pasa, quede un rastro
+      # diagnosticable.
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=400"
+      # El servidor de Express sirve el frontend estático (mismo origen).
+      - key: SERVE_STATIC
+        value: "true"
+      # HTTPS en Render → la cookie de sesión se marca Secure.
+      - key: COOKIE_SECURE
+        value: "true"
+      # Reglas de negocio.
+      - key: CHECK_IN_RADIUS_METERS
+        value: "100"
+      - key: NEARBY_RADIUS_METERS
+        value: "2000"
+      # Render genera un secreto aleatorio y seguro para firmar el JWT.
+      - key: SESSION_SECRET
+        generateValue: true
+      # DATABASE_URL se conecta AUTOMÁTICAMENTE a la BD de Postgres de arriba
+      # (Internal Connection String). No hay que copiar/pegar nada.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ferreteros-db
+          property: connectionString
+      # Carpeta de los "Secret Files" que subes en el panel de Render (los CSV
+      # con los datos reales: Promotores, Clientes, Sucursales y Productos; así
+      # NO viven en el repositorio de GitHub).
+      - key: SEED_DIR
+        value: "/etc/secrets"
+      # El catálogo (clientes, sucursales y productos) se sincroniza desde el Sheet.
+      - key: CATALOG_SOURCE
+        value: "sheet"
+      # --- Google Sheets (admin) ---------------------------------------------
+      # Pon estos valores en el panel de Render (sync:false = no van al repo).
+      # GOOGLE_SERVICE_ACCOUNT_JSON = pega el JSON completo del Service Account.
+      - key: GOOGLE_SHEETS_ID
+        sync: false
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: GOOGLE_SHEETS_TAB
+        value: "Visitas"

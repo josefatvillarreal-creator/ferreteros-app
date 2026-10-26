@@ -1,0 +1,40 @@
+# App (Express: API + frontend) detrás de Caddy con HTTPS automático.
+# El GPS de los teléfonos funciona porque se sirve por HTTPS con certificado
+# válido. Requiere un dominio con DNS apuntando a este servidor (puertos 80/443).
+services:
+  app:
+    build: .
+    environment:
+      - SESSION_SECRET=${SESSION_SECRET:?define SESSION_SECRET en .env}
+      - COOKIE_SECURE=true
+      - CHECK_IN_RADIUS_METERS=100
+      - NEARBY_RADIUS_METERS=2000
+      - CORS_ORIGIN=https://ferreteros.tudominio.com
+      # Google Sheets (opcional): monta el JSON y define estas variables.
+      - GOOGLE_SERVICE_ACCOUNT_KEY_FILE=/run/credentials/service-account.json
+      - GOOGLE_SHEETS_ID=${GOOGLE_SHEETS_ID:-}
+      - GOOGLE_SHEETS_TAB=Visitas
+    volumes:
+      - db-data:/app/backend/prisma # persiste la BD SQLite (dev.db)
+      - ./backend/credentials:/run/credentials:ro # JSON del Service Account
+    expose:
+      - "8080"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:

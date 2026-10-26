@@ -1,0 +1,28 @@
+{
+  "name": "ferreteros-app",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "googleapis": "^176.0.0",
+    "leaflet": "^1.9.4",
+    "localforage": "^1.10.0",
+    "lucide-react": "^0.400.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "vite": "^8.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

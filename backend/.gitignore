@@ -1,0 +1,13 @@
+node_modules
+.env
+*.log
+
+# SQLite (dev) incluidos los archivos de WAL (dev.db-shm / dev.db-wal /
+# dev.db-journal). Las migraciones en prisma/migrations SÍ se versionan.
+prisma/dev.db*
+
+# Credenciales del Service Account de Google (NUNCA versionar el JSON).
+# Se conserva el README de instrucciones, pero no las claves.
+credentials/*
+!credentials/README.md
+*.service-account.json

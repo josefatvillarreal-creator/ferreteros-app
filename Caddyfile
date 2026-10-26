@@ -1,0 +1,7 @@
+# Caddy: HTTPS automático (Let's Encrypt) como reverse proxy del backend.
+# Reemplaza `ferreteros.tudominio.com` por tu dominio real (con DNS apuntando
+# a este servidor). Caddy obtiene y renueva el certificado TLS solo.
+ferreteros.tudominio.com {
+	encode gzip
+	reverse_proxy app:8080
+}

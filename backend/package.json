@@ -1,0 +1,36 @@
+{
+  "name": "ferreteros-backend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Backend de Ferreteros APP: visitas de promotores a clientes ferreteros y sesiones HttpOnly.",
+  "scripts": {
+    "test": "node --test",
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "prisma db seed",
+    "db:studio": "prisma studio"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "googleapis": "^174.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^9.0.5"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
+  },
+  "devDependencies": {
+    "prisma": "^6.19.3"
+  }
+}

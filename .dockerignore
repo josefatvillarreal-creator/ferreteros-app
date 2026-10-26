@@ -1,0 +1,16 @@
+**/node_modules
+dist
+.git
+*.log
+
+# Secretos y datos sensibles: NUNCA en la imagen.
+.env
+.env.*
+backend/.env
+backend/.env.*
+Promotores.csv
+Tiendas.csv
+*.csv
+backend/credentials/*.json
+backend/prisma/dev.db
+backend/prisma/dev.db-journal
