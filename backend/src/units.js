@@ -46,3 +46,9 @@ export function normalizeItems(raw, activeIds) {
   }
   return [...sums].map(([productoId, cantidad]) => ({ productoId, cantidad }));
 }
+
+// Texto legible de los items ("Rollo: 3; Cubeta: 2") para el Sheet de actividad.
+// Un producto fuera del catálogo se muestra con su id.
+export function describeItems(items, catalog) {
+  return (items || []).map((i) => `${catalog.get(i.productoId)?.nombre ?? i.productoId}: ${i.cantidad}`).join("; ");
+}

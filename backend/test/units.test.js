@@ -77,3 +77,11 @@ test("normalizeItems devuelve [] con entradas que no son arreglo o vacías", () 
 test("normalizeItems ignora entradas que no son objeto", () => {
   assert.deepEqual(normalizeItems([null, 5, "rollo"], active), []);
 });
+
+test("describeItems lista producto: cantidad separados por punto y coma", async () => {
+  const { describeItems } = await import("../src/units.js");
+  const cat = new Map([["rollo", { nombre: "Rollo", equivalencia: 1, precio: 0 }], ["cubeta", { nombre: "Cubeta", equivalencia: 0.6, precio: 0 }]]);
+  assert.equal(describeItems([{ productoId: "rollo", cantidad: 3 }, { productoId: "cubeta", cantidad: 2 }], cat), "Rollo: 3; Cubeta: 2");
+  assert.equal(describeItems([{ productoId: "viejo", cantidad: 1 }], cat), "viejo: 1");
+  assert.equal(describeItems([], cat), "");
+});

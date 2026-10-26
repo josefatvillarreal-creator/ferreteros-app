@@ -1,19 +1,18 @@
 // ---------------------------------------------------------------------------
-// Metas de venta SEMANALES (por promotor y por tienda) desde Google Sheets.
+// Metas de venta SEMANALES (por promotor y por sucursal) desde Google Sheets.
 // ---------------------------------------------------------------------------
 // Pestaña "Metas", con encabezados detectados por nombre (no por posición):
 //   Tipo | ID | Nombre | Meta
-//   - Tipo  → "promotor" o "tienda".
-//   - ID    → ID del promotor o de la tienda (debe coincidir con su ID real).
+//   - Tipo  → "promotor" o "sucursal" (se acepta "tienda" como sinónimo).
+//   - ID    → ID del promotor o Num de la sucursal (debe coincidir con su ID real).
 //   - Nombre → solo para que sea legible en el Sheet; no se usa para nada.
-//   - Meta  → "unidades-equivalentes de rollo" vendidas EN LA SEMANA para
-//             considerarla alcanzada (ver DEFAULT_WEEKLY_GOAL_ROLLOS/goalUnits
-//             más abajo — 1 rollo = 1 unidad, 1 cubeta = CUBETA_WEIGHT
-//             unidades, los galones no cuentan hacia la meta).
+//   - Meta  → "unidades-equivalentes" vendidas EN LA SEMANA para considerarla
+//             alcanzada: cada producto aporta cantidad × su equivalencia (ver
+//             units.js y la pestaña Productos).
 //
-// Una fila ausente = SIN META PERSONALIZADA para ese promotor/tienda. Para
-// promotores (no tiendas), db.js usa entonces el default fijo
-// (DEFAULT_WEEKLY_GOAL_ROLLOS) en vez de "sin meta" — la meta personalizada
+// Una fila ausente = SIN META PERSONALIZADA para ese promotor/sucursal. Para
+// promotores (no sucursales), db.js usa entonces el default fijo
+// (DEFAULT_WEEKLY_GOAL_UNITS) en vez de "sin meta" — la meta personalizada
 // de aquí es la EXCEPCIÓN, no el único camino para tener una meta.
 //
 // Cachea en memoria (TTL) para no llamar a la API en cada check-out. Si la
@@ -29,26 +28,14 @@ const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
 const TTL_MS = Number(process.env.GOALS_CACHE_TTL_MS ?? 5 * 60 * 1000);
 const HEADERS = ["Tipo", "ID", "Nombre", "Meta"];
 
-// Meta semanal por defecto de un promotor SIN meta personalizada: 30 rollos,
-// o 50 cubetas, o una mezcla coherente entre ambos ("Actualizamos las metas,
-// la meta son 30 rollos a la semana o 50 cubetas a la semana o una mezcla
-// coherente de los productos"). Se modela como "unidades-equivalentes de
-// rollo": 1 rollo = 1 unidad, 1 cubeta = CUBETA_WEIGHT unidades (30/50, así
-// 50 cubetas también llegan a 30 unidades), los galones NO cuentan hacia la
-// meta. Una meta PERSONALIZADA (fila en "Metas") se interpreta con la misma
-// fórmula, solo que con otro número de unidades objetivo.
-export const DEFAULT_WEEKLY_GOAL_ROLLOS = 30;
-const DEFAULT_WEEKLY_GOAL_CUBETAS = 50;
-export const CUBETA_WEIGHT = DEFAULT_WEEKLY_GOAL_ROLLOS / DEFAULT_WEEKLY_GOAL_CUBETAS;
-
-// Unidades-equivalentes de rollo de una visita/suma (rollos + cubetas
-// ponderadas; los galones no cuentan hacia la meta).
-export function goalUnits({ rollos, cubetas }) {
-  return (rollos || 0) + (cubetas || 0) * CUBETA_WEIGHT;
-}
+// Meta semanal por defecto de un promotor SIN meta personalizada, en
+// unidades-equivalentes (cantidad × equivalencia de cada producto). Una meta
+// PERSONALIZADA (fila en "Metas") se interpreta con la misma fórmula, solo con
+// otro número de unidades objetivo.
+export const DEFAULT_WEEKLY_GOAL_UNITS = 30;
 
 let clientPromise = null;
-let cache = { at: 0, promoters: new Map(), stores: new Map() };
+let cache = { at: 0, promoters: new Map(), sucursales: new Map() };
 
 function isConfigured() {
   return Boolean((config.sheets.json || config.sheets.keyFile) && config.sheets.spreadsheetId);
@@ -92,8 +79,8 @@ async function loadGoals() {
   }
 
   const promoters = new Map();
-  const stores = new Map();
-  if (header === -1 || idC === -1) return { promoters, stores };
+  const sucursales = new Map();
+  if (header === -1 || idC === -1) return { promoters, sucursales };
 
   for (let r = header + 1; r < rows.length; r++) {
     const cells = rows[r];
@@ -101,18 +88,18 @@ async function loadGoals() {
     const meta = Number(cells?.[metaC]);
     if (!id || !Number.isFinite(meta) || meta <= 0) continue;
     const tipo = String(cells?.[tipoC] ?? "").trim().toLowerCase();
-    if (tipo === "tienda") stores.set(id, meta);
+    if (tipo === "sucursal" || tipo === "tienda") sucursales.set(id, meta);
     else promoters.set(id, meta); // por defecto, "promotor"
   }
-  return { promoters, stores };
+  return { promoters, sucursales };
 }
 
 async function ensureCache() {
   if (Date.now() - cache.at < TTL_MS) return cache;
   if (!isConfigured()) return cache;
   try {
-    const { promoters, stores } = await loadGoals();
-    cache = { at: Date.now(), promoters, stores };
+    const { promoters, sucursales } = await loadGoals();
+    cache = { at: Date.now(), promoters, sucursales };
   } catch (e) {
     console.warn("[goalsSheet] No se pudo leer la pestaña de metas:", e.message);
   }
@@ -120,17 +107,17 @@ async function ensureCache() {
 }
 
 // Meta PERSONALIZADA (unidades-equivalentes) de un promotor, o null si usa el
-// default (ver DEFAULT_WEEKLY_GOAL_ROLLOS en db.js, que aplica el fallback).
+// default (ver DEFAULT_WEEKLY_GOAL_UNITS en db.js, que aplica el fallback).
 export async function getPromoterGoal(promoterId) {
   const { promoters } = await ensureCache();
   return promoters.get(String(promoterId).trim()) ?? null;
 }
 
-// Meta semanal (unidades-equivalentes) de una tienda, o null si no tiene una
-// definida (las tiendas NO tienen default — solo meta personalizada).
+// Meta semanal (unidades-equivalentes) de una sucursal, o null si no tiene una
+// definida (las sucursales NO tienen default — solo meta personalizada).
 export async function getSucursalGoal(sucursalId) {
-  const { stores } = await ensureCache();
-  return stores.get(String(sucursalId).trim()) ?? null;
+  const { sucursales } = await ensureCache();
+  return sucursales.get(String(sucursalId).trim()) ?? null;
 }
 
 // Asegura que la pestaña "Metas" exista y tenga encabezados. Devuelve las
@@ -170,10 +157,13 @@ function colLetter(idx) {
   return s;
 }
 
-// Crea o actualiza la meta semanal de un promotor o tienda (`tipo`: "promotor"
-// | "tienda"). Actualiza también el caché en memoria al instante, para que el
+// Crea o actualiza la meta semanal de un promotor o sucursal (`tipo`: "promotor"
+// | "sucursal"). Actualiza también el caché en memoria al instante, para que el
 // tablero refleje el cambio sin esperar el TTL. Usado por el botón "Meta" del
 // tablero del gerente/admin.
+// "tienda" es sinónimo histórico de "sucursal" en la columna Tipo.
+const normTipo = (t) => (t === "tienda" ? "sucursal" : t);
+
 async function setGoal(tipo, id, meta, nombre = "") {
   if (!isConfigured()) throw new Error("Google Sheets no está configurado (faltan credenciales o GOOGLE_SHEETS_ID).");
   const sheets = await getClient();
@@ -186,7 +176,7 @@ async function setGoal(tipo, id, meta, nombre = "") {
 
   let rowNumber = -1;
   for (let r = 1; r < rows.length; r++) {
-    if (String(rows[r]?.[idC] ?? "").trim() === String(id).trim() && String(rows[r]?.[tipoC] ?? "").trim().toLowerCase() === tipo) {
+    if (String(rows[r]?.[idC] ?? "").trim() === String(id).trim() && normTipo(String(rows[r]?.[tipoC] ?? "").trim().toLowerCase()) === tipo) {
       rowNumber = r + 1;
       break;
     }
@@ -218,7 +208,7 @@ async function setGoal(tipo, id, meta, nombre = "") {
   }
 
   // Refleja el cambio en el caché de inmediato (no esperar el TTL de 5 min).
-  const target = tipo === "tienda" ? cache.stores : cache.promoters;
+  const target = tipo === "sucursal" ? cache.sucursales : cache.promoters;
   target.set(String(id).trim(), meta);
 }
 
@@ -227,5 +217,5 @@ export async function setPromoterGoal(promoterId, meta, nombre = "") {
 }
 
 export async function setSucursalGoal(sucursalId, meta, nombre = "") {
-  return setGoal("tienda", sucursalId, meta, nombre);
+  return setGoal("sucursal", sucursalId, meta, nombre);
 }

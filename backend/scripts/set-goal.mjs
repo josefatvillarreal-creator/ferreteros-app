@@ -1,15 +1,15 @@
 // ---------------------------------------------------------------------------
-// Alta / actualización de UNA meta mensual (promotor o tienda) en la pestaña
-// "Metas" del Sheet (unidades = rollos+cubetas del mes).
+// Alta / actualización de UNA meta semanal (promotor o sucursal) en la pestaña
+// "Metas" del Sheet (unidades-equivalentes de la semana).
 // ---------------------------------------------------------------------------
 // Crea la pestaña si no existe. Si el ID ya tiene una meta, la reemplaza.
 //
 // USO (desde backend/):
-//   node scripts/set-goal.mjs <promotor|tienda> <ID> <META_UNIDADES> ["<Nombre opcional>"]
+//   node scripts/set-goal.mjs <promotor|sucursal> <ID> <META_UNIDADES> ["<Nombre opcional>"]
 //
 // Ejemplos:
 //   node scripts/set-goal.mjs promotor 90500276 40 "HERNANDEZ HERNANDEZ JUAN VICENTE"
-//   node scripts/set-goal.mjs tienda 8789 300 "Miguel Alemán"
+//   node scripts/set-goal.mjs sucursal 1001 30 "Demo Centro Morelia"
 // ---------------------------------------------------------------------------
 import "dotenv/config";
 import { getSheetsClient, colLetter } from "./_sheetlib.mjs";
@@ -86,14 +86,14 @@ export async function setGoal({ tipo, id, meta, nombre, sheets, rows }) {
 async function main() {
   const tipo = String(tipoRaw || "").trim().toLowerCase();
   const meta = Number(metaRaw);
-  if (!["promotor", "tienda"].includes(tipo) || !id || !Number.isFinite(meta) || meta <= 0) {
-    console.error('Uso: node scripts/set-goal.mjs <promotor|tienda> <ID> <META_UNIDADES> ["<Nombre>"]');
+  if (!["promotor", "sucursal"].includes(tipo) || !id || !Number.isFinite(meta) || meta <= 0) {
+    console.error('Uso: node scripts/set-goal.mjs <promotor|sucursal> <ID> <META_UNIDADES> ["<Nombre>"]');
     process.exit(1);
   }
   const sheets = await getSheetsClient();
   const rows = await ensureTab(sheets);
   await setGoal({ tipo, id, meta, nombre, sheets, rows });
-  console.log(`✅ Meta guardada: ${tipo} ${id} -> ${meta} unidades/mes.`);
+  console.log(`✅ Meta guardada: ${tipo} ${id} -> ${meta} unidades/semana.`);
 }
 
 // Solo ejecuta el CLI si se invoca directamente (para poder importar setGoal

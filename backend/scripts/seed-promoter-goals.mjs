@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Siembra una meta mensual PLACEHOLDER (unidades = rollos+cubetas) para cada
+// Siembra una meta semanal PLACEHOLDER (unidades-equivalentes) para cada
 // promotor de la pestaña "Promotores" que TODAVÍA no tenga una fila en
 // "Metas". No pisa metas que ya existan (así se puede correr de nuevo sin
 // riesgo cuando se dan de alta promotores nuevos).

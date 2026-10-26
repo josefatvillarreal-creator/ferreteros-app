@@ -2,7 +2,8 @@ import { Router } from "express";
 import { requireAuth } from "../auth.js";
 import { config } from "../config.js";
 import { distanceMeters, isValidCoords } from "../geo.js";
-import { getSucursal, getVisit, fetchTodayVisits, submitVisitReport } from "../db.js";
+import { getSucursal, getVisit, fetchTodayVisits, submitVisitReport, resolveCheckoutItems, getCatalogoProductos } from "../db.js";
+import { unitsOf, describeItems } from "../units.js";
 import { findPromoterById, notifyCheckIn, checkAndNotifyGoals, getMyGoalProgress } from "../db.js";
 import { appendVisitRow } from "../sheets.js";
 import { appendPresenceConfirmation } from "../presenceSheet.js";
@@ -39,13 +40,13 @@ router.get("/my-goal", async (req, res) => {
   }
 });
 
-// Valida que el promotor está dentro del rango de la tienda. El SERVIDOR es la
+// Valida que el promotor está dentro del rango de la sucursal. El SERVIDOR es la
 // autoridad: recalcula la distancia con Haversine usando sus propias coordenadas
-// de tienda y las coordenadas GPS reales que envía el cliente.
+// de sucursal y las coordenadas GPS reales que envía el cliente.
 async function assertInRange(promoterId, sucursalId, coords) {
-  const store = await getSucursal(sucursalId);
-  if (!store) {
-    const e = new Error("Tienda no encontrada en el catálogo");
+  const sucursal = await getSucursal(sucursalId);
+  if (!sucursal) {
+    const e = new Error("Sucursal no encontrada en el catálogo");
     e.status = 404;
     throw e;
   }
@@ -55,18 +56,18 @@ async function assertInRange(promoterId, sucursalId, coords) {
     e.status = 400;
     throw e;
   }
-  const dist = distanceMeters(coords.lat, coords.lng, store.lat, store.lng);
+  const dist = distanceMeters(coords.lat, coords.lng, sucursal.lat, sucursal.lng);
   // 403: fuera del radio permitido (Protexa: 100 m). Incluimos la distancia
   // calculada por el servidor para que el cliente pueda mostrarla.
   if (dist > config.rangeMeters) {
     const e = new Error(
-      `Estás a ${Math.round(dist)} m de la tienda; debes estar a ${config.rangeMeters} m o menos.`
+      `Estás a ${Math.round(dist)} m de la sucursal; debes estar a ${config.rangeMeters} m o menos.`
     );
     e.status = 403;
     e.distance = Math.round(dist);
     throw e;
   }
-  return { store, distance: Math.round(dist) };
+  return { sucursal, distance: Math.round(dist) };
 }
 
 // Valida que la foto sea un data URL de imagen y no exceda un tamaño razonable.
@@ -91,7 +92,7 @@ router.post("/:sucursalId/check-in", async (req, res) => {
   try {
     const { coords, photo } = req.body ?? {};
     assertValidPhoto(photo);
-    const { store, distance } = await assertInRange(req.promoter.id, req.params.sucursalId, coords);
+    const { sucursal, distance } = await assertInRange(req.promoter.id, req.params.sucursalId, coords);
 
     const existing = await getVisit(req.promoter.id, req.params.sucursalId);
     if (existing?.status === "checked-in" || existing?.status === "checked-out") {
@@ -112,37 +113,39 @@ router.post("/:sucursalId/check-in", async (req, res) => {
       photo, // persistida en el servidor (en real: blob storage)
     });
     const sheetWrite = appendVisitRow({
-      promoter, store, sucursalId: req.params.sucursalId,
+      promoter, sucursal, sucursalId: req.params.sucursalId,
       checkInTime, checkOutTime: null,
-      rollos: 0, cubetas: 0,
+      productos: "", unidades: 0,
     }).then((result) => {
       if (result?.error) console.error("[check-in] Falló el registro en Sheets:", result.error);
-      else console.log(`[check-in] OK en Sheet promotor=${req.promoter.id} tienda=${req.params.sucursalId}`);
+      else console.log(`[check-in] OK en Sheet promotor=${req.promoter.id} sucursal=${req.params.sucursalId}`);
     });
 
     await dbWrite;
-    console.log(`[check-in] OK en Postgres promotor=${req.promoter.id} tienda=${req.params.sucursalId}`);
+    console.log(`[check-in] OK en Postgres promotor=${req.promoter.id} sucursal=${req.params.sucursalId}`);
     sheetWrite.catch(() => {});
 
     // Avisa a su supervisor (si tiene uno) que este promotor hizo check-in,
-    // con la tienda y si llegó a tiempo. Best-effort: no bloquea el check-in.
+    // con la sucursal y si llegó a tiempo. Best-effort: no bloquea el check-in.
     notifyCheckIn(req.promoter.id, req.params.sucursalId, checkInTime).catch(() => {});
 
     // No devolvemos la foto cruda; solo metadatos.
     const record = await getVisit(req.promoter.id, req.params.sucursalId);
     return res.status(201).json(stripPhoto(record));
   } catch (err) {
-    console.error(`[check-in] FALLÓ promotor=${req.promoter?.id} tienda=${req.params.sucursalId} status=${err?.status} code=${err?.code}:`, err?.message);
+    console.error(`[check-in] FALLÓ promotor=${req.promoter?.id} sucursal=${req.params.sucursalId} status=${err?.status} code=${err?.code}:`, err?.message);
     if (err?.code === "P2002") return res.status(409).json({ message: "La visita ya fue registrada" });
     return res.status(err.status ?? 400).json({ message: err.message, distance: err.distance });
   }
 });
 
-// POST /api/visits/:sucursalId/check-out  { coords, rollos, cubetas }
+// POST /api/visits/:sucursalId/check-out  { coords, items: [{ productoId, cantidad }] }
+// Solo cuentan los productos ACTIVOS del catálogo (ver resolveCheckoutItems);
+// sin items válidos el check-out se registra igual, con todo en 0.
 router.post("/:sucursalId/check-out", async (req, res) => {
   try {
-    const { coords, rollos, cubetas } = req.body ?? {};
-    const { store, distance } = await assertInRange(req.promoter.id, req.params.sucursalId, coords);
+    const { coords, items: rawItems } = req.body ?? {};
+    const { sucursal, distance } = await assertInRange(req.promoter.id, req.params.sucursalId, coords);
 
     const existing = await getVisit(req.promoter.id, req.params.sucursalId);
     if (existing?.status !== "checked-in") {
@@ -151,8 +154,8 @@ router.post("/:sucursalId/check-out", async (req, res) => {
 
     const promoter = await findPromoterById(req.promoter.id);
     const checkOutTime = new Date().toISOString();
-    const rollosNum = Math.max(0, Number(rollos) || 0);
-    const cubetasNum = Math.max(0, Number(cubetas) || 0);
+    const items = await resolveCheckoutItems(rawItems);
+    const catalog = await getCatalogoProductos();
 
     // Postgres y el Sheet en PARALELO, igual que en el check-in. La fila del
     // Sheet REPITE checkInTime (de la visita ya abierta) para que, ella sola,
@@ -161,29 +164,27 @@ router.post("/:sucursalId/check-out", async (req, res) => {
       status: "checked-out",
       checkOutTime,
       checkOutDistance: distance,
-      rollos: rollosNum,
-      cubetas: cubetasNum,
-    });
+    }, items);
     const sheetWrite = appendVisitRow({
-      promoter, store, sucursalId: req.params.sucursalId,
+      promoter, sucursal, sucursalId: req.params.sucursalId,
       checkInTime: existing.checkInTime, checkOutTime,
-      rollos: rollosNum, cubetas: cubetasNum,
+      productos: describeItems(items, catalog), unidades: unitsOf(items, catalog),
     }).then((result) => {
       if (result?.error) console.error("[check-out] Falló el registro en Sheets:", result.error);
-      else console.log(`[check-out] OK en Sheet promotor=${req.promoter.id} tienda=${req.params.sucursalId}`);
+      else console.log(`[check-out] OK en Sheet promotor=${req.promoter.id} sucursal=${req.params.sucursalId}`);
     });
 
     const record = await dbWrite;
-    console.log(`[check-out] OK en Postgres promotor=${req.promoter.id} tienda=${req.params.sucursalId} id=${record?.id}`);
+    console.log(`[check-out] OK en Postgres promotor=${req.promoter.id} sucursal=${req.params.sucursalId} id=${record?.id}`);
     sheetWrite.catch(() => {});
 
-    // ¿Este check-out hace que el promotor o la tienda lleguen a su meta
+    // ¿Este check-out hace que el promotor o la sucursal lleguen a su meta
     // mensual? Best-effort y en segundo plano: no retrasa la respuesta.
     checkAndNotifyGoals(req.promoter.id, req.params.sucursalId).catch(() => {});
 
     return res.json(stripPhoto(record));
   } catch (err) {
-    console.error(`[check-out] FALLÓ promotor=${req.promoter?.id} tienda=${req.params.sucursalId} status=${err?.status} code=${err?.code}:`, err?.message);
+    console.error(`[check-out] FALLÓ promotor=${req.promoter?.id} sucursal=${req.params.sucursalId} status=${err?.status} code=${err?.code}:`, err?.message);
     if (err?.code === "P2002") return res.status(409).json({ message: "La visita ya fue registrada" });
     return res.status(err.status ?? 400).json({ message: err.message, distance: err.distance });
   }
@@ -192,21 +193,21 @@ router.post("/:sucursalId/check-out", async (req, res) => {
 // POST /api/visits/:sucursalId/confirm-presence  { coords?, sigueEnTienda }
 // Confirmación de "sigo en tienda" — la dispara el cliente una vez al día, en
 // un momento aleatorio entre 10am y 4pm, solo mientras el promotor tiene un
-// check-in abierto en esa tienda, preguntándole Sí/No. `coords` es best-effort
+// check-in abierto en esa sucursal, preguntándole Sí/No. `coords` es best-effort
 // (el cliente intenta tomar el GPS al responder, pero si falla o lo niega, NO
-// se bloquea la respuesta) y no se revalida contra el radio de la tienda: si
+// se bloquea la respuesta) y no se revalida contra el radio de la sucursal: si
 // contesta "No", lo esperable es que ya esté fuera de rango.
 router.post("/:sucursalId/confirm-presence", async (req, res) => {
   try {
     const { coords, sigueEnTienda } = req.body ?? {};
     if (typeof sigueEnTienda !== "boolean") {
-      return res.status(400).json({ message: "Falta indicar si sigue en la tienda (sí/no)." });
+      return res.status(400).json({ message: "Falta indicar si sigue en la sucursal (sí/no)." });
     }
     const existing = await getVisit(req.promoter.id, req.params.sucursalId);
     if (existing?.status !== "checked-in") {
-      return res.status(409).json({ message: "No tienes una visita abierta en esa tienda" });
+      return res.status(409).json({ message: "No tienes una visita abierta en esa sucursal" });
     }
-    const [promoter, store] = await Promise.all([
+    const [promoter, sucursal] = await Promise.all([
       findPromoterById(req.promoter.id),
       getSucursal(req.params.sucursalId),
     ]);
@@ -215,14 +216,14 @@ router.post("/:sucursalId/confirm-presence", async (req, res) => {
       promoterName: promoter?.name || req.promoter.id,
       supervisor: promoter?.supervisor || "",
       sucursalId: req.params.sucursalId,
-      sucursalName: store?.name || req.params.sucursalId,
+      sucursalName: sucursal ? `${sucursal.clienteNombre} – ${sucursal.name}` : req.params.sucursalId,
       coords: isValidCoords(coords) ? coords : null,
       sigueEnTienda,
     });
-    console.log(`[confirm-presence] OK promotor=${req.promoter.id} tienda=${req.params.sucursalId} sigueEnTienda=${sigueEnTienda}`);
+    console.log(`[confirm-presence] OK promotor=${req.promoter.id} sucursal=${req.params.sucursalId} sigueEnTienda=${sigueEnTienda}`);
     return res.status(204).end();
   } catch (err) {
-    console.error(`[confirm-presence] FALLÓ promotor=${req.promoter?.id} tienda=${req.params.sucursalId}:`, err?.message);
+    console.error(`[confirm-presence] FALLÓ promotor=${req.promoter?.id} sucursal=${req.params.sucursalId}:`, err?.message);
     return res.status(err.status ?? 500).json({ message: err.message || "No se pudo guardar la confirmación" });
   }
 });

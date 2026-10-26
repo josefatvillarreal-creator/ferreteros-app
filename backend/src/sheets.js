@@ -24,11 +24,12 @@ const HEADERS = [
   "registrado_en",
   "id_promotor",
   "nombre",
-  "tienda",
+  "cliente",
+  "sucursal",
   "hora_entrada",
   "hora_salida",
-  "rollos",
-  "cubetas",
+  "productos", // "Rollo: 3; Cubeta: 2" (ver describeItems en units.js)
+  "unidades", // unidades-equivalentes de la visita (ver unitsOf en units.js)
 ];
  
 // Encabezados de la pestaña de retroalimentación (reportes de error de los
@@ -179,7 +180,7 @@ export async function appendFeedbackRow({ idPromotor, nombre, sucursal, descripc
 // primero — se disparan en paralelo (ver routes/visits.js). Best-effort:
 // nunca lanza hacia el caller (registra el error y sigue), para no afectar al
 // check-in/check-out del promotor.
-export async function appendVisitRow({ promoter, store, sucursalId, checkInTime, checkOutTime, rollos, cubetas }) {
+export async function appendVisitRow({ promoter, sucursal, sucursalId, checkInTime, checkOutTime, productos, unidades }) {
   if (!isConfigured()) {
     console.warn("[sheets] Integración no configurada (faltan credenciales o spreadsheetId); se omite.");
     return { skipped: true };
@@ -198,11 +199,12 @@ export async function appendVisitRow({ promoter, store, sucursalId, checkInTime,
       formatMexicoDateTime(new Date()), // registrado_en (hora de México, no UTC)
       promoter.id, // ID promotor
       promoter.name, // Nombre promotor
-      store?.name ?? sucursalId, // Tienda
+      sucursal?.clienteNombre ?? "", // Cliente
+      sucursal?.name ?? sucursalId, // Sucursal
       formatMexicoDateTime(checkInTime, promoterTz), // Hora entrada (hora local del promotor)
       checkOutTime ? formatMexicoDateTime(checkOutTime, promoterTz) : "0", // Hora salida: "0" = check-in todavía abierto
-      rollos ?? 0, // Inventario: rollos
-      cubetas ?? 0, // Inventario: cubetas
+      productos ?? "", // Cantidades por producto
+      unidades ?? 0, // Unidades-equivalentes
     ];
     await sheets.spreadsheets.values.append({
       spreadsheetId: config.sheets.spreadsheetId,

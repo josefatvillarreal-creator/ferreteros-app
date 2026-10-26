@@ -10,7 +10,7 @@
 //   - "checkin"          → un promotor hizo check-in. Para: su supervisor.
 //   - "promoter_goal"     → un promotor alcanzó su meta mensual. Para: su
 //                           supervisor.
-//   - "store_goal"        → una tienda alcanzó su meta mensual. Para: "admin".
+//   - "sucursal_goal"      → una sucursal alcanzó su meta semanal. Para: "admin".
 //
 // Best-effort en TODO: si el Sheet no está configurado o falla, se registra el
 // error y se sigue (nunca debe romper un check-in/check-out).
@@ -21,7 +21,7 @@ import { dayKeyOf, todayKey } from "./businessDay.js";
 
 const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
 
-const HEADERS = ["fecha", "tipo", "para", "id_promotor", "promotor", "id_tienda", "tienda", "periodo", "detalle"];
+const HEADERS = ["fecha", "tipo", "para", "id_promotor", "promotor", "id_sucursal", "sucursal", "periodo", "detalle"];
 
 // La campana hace polling cada 30s (ver NotificationBell.jsx) — sin caché,
 // eso era una lectura completa del Sheet (hasta 5000 filas) por cada admin/
@@ -98,7 +98,7 @@ async function readAllRows() {
     idPromotor: r[3] || "",
     promotor: r[4] || "",
     idSucursal: r[5] || "",
-    tienda: r[6] || "",
+    sucursal: r[6] || "",
     periodo: r[7] || "",
     detalle: r[8] || "",
   }));
@@ -107,12 +107,12 @@ async function readAllRows() {
 }
 
 // Agrega una notificación. Best-effort: nunca lanza (registra y sigue).
-export async function appendNotification({ tipo, para, idPromotor = "", promotor = "", idSucursal = "", tienda = "", periodo = "", detalle = "" }) {
+export async function appendNotification({ tipo, para, idPromotor = "", promotor = "", idSucursal = "", sucursal = "", periodo = "", detalle = "" }) {
   if (!isConfigured()) return { skipped: true };
   try {
     const sheets = await getClient();
     await ensureTab(sheets);
-    const row = [new Date().toISOString(), tipo, para, idPromotor, promotor, idSucursal, tienda, periodo, detalle];
+    const row = [new Date().toISOString(), tipo, para, idPromotor, promotor, idSucursal, sucursal, periodo, detalle];
     await sheets.spreadsheets.values.append({
       spreadsheetId: config.sheets.spreadsheetId,
       range: `${config.sheets.notificacionesTab}!A1`,
@@ -128,7 +128,7 @@ export async function appendNotification({ tipo, para, idPromotor = "", promotor
   }
 }
 
-// ¿Ya existe una notificación de meta para este promotor/tienda en este
+// ¿Ya existe una notificación de meta para este promotor/sucursal en este
 // período? Se usa para no mandar la misma alerta de "meta alcanzada" en cada
 // check-out del mes (idempotencia: se revisa el histórico en vez de intentar
 // detectar el cruce exacto del umbral).

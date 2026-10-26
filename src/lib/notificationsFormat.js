@@ -7,7 +7,7 @@ import { Bell, LogIn, Trophy, Store as StoreIcon, Mail, KeyRound } from "lucide-
 export function iconFor(tipo) {
   if (tipo === "checkin") return LogIn;
   if (tipo === "promoter_goal") return Trophy;
-  if (tipo === "store_goal") return StoreIcon;
+  if (tipo === "sucursal_goal") return StoreIcon;
   if (tipo === "weekly_report") return Mail;
   if (tipo === "password_recovery") return KeyRound;
   return Bell;

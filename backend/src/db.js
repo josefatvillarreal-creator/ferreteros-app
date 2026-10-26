@@ -9,9 +9,9 @@ import { config } from "./config.js";
 import { findPromoterInSheet, getAllPromotersFromSheet } from "./promotersSheet.js";
 import { ensureCatalogSynced } from "./catalogSync.js";
 import { summarizeVisitRows } from "./managerSummary.js";
-import { fetchVisitRowsFromSheet } from "./activitySheet.js";
 import { todayKey, resolveRange, formatMexicoDateTime, dayKeyOf, timeZoneForEstado } from "./businessDay.js";
-import { getPromoterGoal, getSucursalGoal, setPromoterGoal as setPromoterGoalInSheet, DEFAULT_WEEKLY_GOAL_ROLLOS, goalUnits } from "./goalsSheet.js";
+import { getPromoterGoal, getSucursalGoal, setPromoterGoal as setPromoterGoalInSheet, DEFAULT_WEEKLY_GOAL_UNITS } from "./goalsSheet.js";
+import { unitsOf, normalizeItems } from "./units.js";
 import { appendNotification, hasGoalNotification } from "./notificationsSheet.js";
 import { appendCompetitionRow } from "./competitionSheet.js";
 import { getTrainingContent, getTrainingQuiz, getTrainingFlashcards } from "./trainingSheet.js";
@@ -62,10 +62,10 @@ export async function getProductosActivos() {
 
 // TODOS los productos (activos o no) con su equivalencia y precio: las ventas
 // históricas de un producto desactivado siguen sumando en metas y tableros.
-// Map<productoId, { equivalencia, precio }> para unitsOf/moneyOf (units.js).
+// Map<productoId, { nombre, equivalencia, precio }> para unitsOf/moneyOf/describeItems (units.js).
 export async function getCatalogoProductos() {
-  const rows = await prisma.producto.findMany({ select: { id: true, equivalencia: true, precio: true } });
-  return new Map(rows.map((p) => [p.id, { equivalencia: p.equivalencia, precio: p.precio }]));
+  const rows = await prisma.producto.findMany({ select: { id: true, nombre: true, equivalencia: true, precio: true } });
+  return new Map(rows.map((p) => [p.id, { nombre: p.nombre, equivalencia: p.equivalencia, precio: p.precio }]));
 }
 
 // --- Visitas ---------------------------------------------------------------
@@ -88,10 +88,15 @@ async function getPromoterTimeZone(promoterId) {
   return timeZoneForEstado(estado);
 }
 
+// Las cantidades por producto de una visita viajan siempre como
+// items: [{ productoId, cantidad }].
+const ITEMS_INCLUDE = { items: { select: { productoId: true, cantidad: true } } };
+
 export async function fetchTodayVisits(promoterId) {
   const tz = await getPromoterTimeZone(promoterId);
   const rows = await prisma.visitRecord.findMany({
     where: { promoterId, day: todayKey(tz) },
+    include: ITEMS_INCLUDE,
   });
   const out = {};
   for (const r of rows) out[r.sucursalId] = r;
@@ -102,7 +107,14 @@ export async function getVisit(promoterId, sucursalId) {
   const tz = await getPromoterTimeZone(promoterId);
   return prisma.visitRecord.findUnique({
     where: { promoterId_sucursalId_day: { promoterId, sucursalId, day: todayKey(tz) } },
+    include: ITEMS_INCLUDE,
   });
+}
+
+// Items válidos de un check-out: solo productos ACTIVOS, cantidades enteras >= 0.
+export async function resolveCheckoutItems(rawItems) {
+  const activos = await getProductosActivos();
+  return normalizeItems(rawItems, new Set(activos.map((p) => p.id)));
 }
 
 // Con AUTH_SOURCE=sheet los promotores viven en el Google Sheet, no en
@@ -133,8 +145,9 @@ export async function ensurePromoterExistsLocally(promoterId) {
 }
 
 // Crea o actualiza (upsert) el registro de visita del día. Convierte los campos
-// de fecha a Date para Prisma. Devuelve el registro persistido.
-export async function submitVisitReport(promoterId, sucursalId, patch) {
+// de fecha a Date para Prisma. Si se pasan `items` (check-out), REEMPLAZAN los
+// anteriores de la visita en la misma transacción. Devuelve el registro con sus items.
+export async function submitVisitReport(promoterId, sucursalId, patch, items) {
   const tz = await getPromoterTimeZone(promoterId);
   const day = todayKey(tz);
   const data = { ...patch };
@@ -145,10 +158,21 @@ export async function submitVisitReport(promoterId, sucursalId, patch) {
 
   // withWriteRetry: reintenta ante bloqueos de SQLite bajo carga concurrente.
   return withWriteRetry(() =>
-    prisma.visitRecord.upsert({
-      where: { promoterId_sucursalId_day: { promoterId, sucursalId, day } },
-      create: { promoterId, sucursalId, day, status: "checked-in", ...data },
-      update: { ...data },
+    prisma.$transaction(async (tx) => {
+      const rec = await tx.visitRecord.upsert({
+        where: { promoterId_sucursalId_day: { promoterId, sucursalId, day } },
+        create: { promoterId, sucursalId, day, status: "checked-in", ...data },
+        update: { ...data },
+      });
+      if (items) {
+        await tx.visitItem.deleteMany({ where: { visitId: rec.id } });
+        if (items.length) {
+          await tx.visitItem.createMany({
+            data: items.map((i) => ({ visitId: rec.id, productoId: i.productoId, cantidad: i.cantidad })),
+          });
+        }
+      }
+      return tx.visitRecord.findUnique({ where: { id: rec.id }, include: ITEMS_INCLUDE });
     })
   );
 }
@@ -239,26 +263,20 @@ export async function getCompetitionReportPhotos(reportId, { supervisorId } = {}
 // SUPERVISOR de la pestaña Promotores) — así el tablero de supervisor
 // reutiliza exactamente la misma agregación que el del gerente.
 export async function getManagerSummary(rangeKey = "today", { supervisorId, from, to } = {}) {
-  // Asegura que las tiendas (con su ESTADO) estén sincronizadas desde el Sheet.
+  // Asegura que las sucursales (con su ESTADO) estén sincronizadas desde el Sheet.
   if (config.catalogSource === "sheet") await ensureCatalogSynced();
 
   const range = resolveRange(rangeKey, { from, to });
 
-  // Con VISITS_SOURCE=sheet (solo para desarrollo local) reconstruimos las
-  // visitas del rango desde la pestaña de auditoría del Sheet, porque la base
-  // local no tiene la actividad real (esa vive en el Postgres de producción).
-  let rows =
-    config.visitsSource === "sheet"
-      ? await fetchVisitRowsFromSheet(range)
-      : await prisma.visitRecord.findMany({
-          where: { day: { gte: range.from, lte: range.to } },
-          include: { promoter: true, store: true },
-          // summarizeVisitRows nunca lee `photo` (foto de check-in, Base64):
-          // omitirla aquí es la diferencia entre traer unos KB por fila y traer
-          // cientos de KB por fila — en un rango de mes/año, con decenas de
-          // promotores, eso es la causa más probable de quedarse sin memoria.
-          omit: { photo: true },
-        });
+  let rows = await prisma.visitRecord.findMany({
+    where: { day: { gte: range.from, lte: range.to } },
+    include: { promoter: true, sucursal: { include: { cliente: true } }, ...ITEMS_INCLUDE },
+    // summarizeVisitRows nunca lee `photo` (foto de check-in, Base64):
+    // omitirla aquí es la diferencia entre traer unos KB por fila y traer
+    // cientos de KB por fila — en un rango de mes/año, con decenas de
+    // promotores, eso es la causa más probable de quedarse sin memoria.
+    omit: { photo: true },
+  });
 
   // Con AUTH_SOURCE=sheet, `promoter` viene del mirror local en Postgres, que
   // solo se refresca en el SIGUIENTE check-in/check-out de cada promotor (ver
@@ -268,7 +286,7 @@ export async function getManagerSummary(rangeKey = "today", { supervisorId, from
   // estado siempre refleje lo que el Sheet dice AHORA (fuente de verdad,
   // editable por el admin), sobreescribimos con una lectura fresca del Sheet
   // (cacheada unos minutos, no golpea la API en cada carga del tablero).
-  if (config.authSource === "sheet" && config.visitsSource !== "sheet") {
+  if (config.authSource === "sheet") {
     const sheetPromoters = await getAllPromotersFromSheet();
     rows = rows.map((r) => {
       const sp = sheetPromoters.get(r.promoterId);
@@ -321,29 +339,27 @@ async function getRoster(supervisorId) {
 
 // --- Metas: progreso SEMANAL por promotor ------------------------------------
 // Le agrega `goal: { target, achieved, reached }` a cada promotor del resumen,
-// en "unidades-equivalentes de rollo" (ver goalUnits en goalsSheet.js). Todo
-// promotor tiene meta: la personalizada del Sheet si existe, si no el default
-// (DEFAULT_WEEKLY_GOAL_ROLLOS). El acumulado de la SEMANA se calcula con la
-// MISMA fuente que el resto del tablero (VISITS_SOURCE): así en desarrollo
-// local (Sheet) el avance de meta coincide con lo que ya se ve en pantalla, y
-// en producción (base de datos) es el acumulado real.
+// en "unidades-equivalentes" (cantidad × equivalencia de cada producto, ver
+// units.js). Todo promotor tiene meta: la personalizada del Sheet si existe, si
+// no el default (DEFAULT_WEEKLY_GOAL_UNITS). El acumulado de la SEMANA sale de la
+// base de datos real e incluye productos desactivados (su historial cuenta).
 async function attachGoalProgress(summary) {
   const week = resolveRange("week");
-  const weekRows =
-    config.visitsSource === "sheet"
-      ? await fetchVisitRowsFromSheet(week)
-      : await prisma.visitRecord.findMany({
-          where: { day: { gte: week.from, lte: week.to } },
-          select: { promoterId: true, rollos: true, cubetas: true },
-        });
+  const [weekRows, catalog] = await Promise.all([
+    prisma.visitRecord.findMany({
+      where: { day: { gte: week.from, lte: week.to } },
+      select: { promoterId: true, ...ITEMS_INCLUDE },
+    }),
+    getCatalogoProductos(),
+  ]);
 
   const achievedByPromoter = new Map();
   for (const r of weekRows) {
-    achievedByPromoter.set(r.promoterId, (achievedByPromoter.get(r.promoterId) || 0) + goalUnits(r));
+    achievedByPromoter.set(r.promoterId, (achievedByPromoter.get(r.promoterId) || 0) + unitsOf(r.items, catalog));
   }
 
   for (const p of summary.promoters) {
-    const target = (await getPromoterGoal(p.id)) ?? DEFAULT_WEEKLY_GOAL_ROLLOS;
+    const target = (await getPromoterGoal(p.id)) ?? DEFAULT_WEEKLY_GOAL_UNITS;
     const achieved = achievedByPromoter.get(p.id) ?? 0;
     p.goal = { target, achieved, reached: achieved >= target };
   }
@@ -383,12 +399,12 @@ function puntualidadTexto(promoter, checkInTime) {
 }
 
 // Se llama al hacer CHECK-IN: avisa al supervisor del promotor (si tiene uno)
-// con la tienda, el nombre del asesor, y si llegó a tiempo o tarde (según su
+// con la sucursal, el nombre del asesor, y si llegó a tiempo o tarde (según su
 // horario de "Entrada" en el Sheet, con 15 min de tolerancia). Best-effort:
 // nunca lanza.
 export async function notifyCheckIn(promoterId, sucursalId, checkInTime = new Date()) {
   try {
-    const [promoter, store] = await Promise.all([findPromoterById(promoterId), getSucursal(sucursalId)]);
+    const [promoter, sucursal] = await Promise.all([findPromoterById(promoterId), getSucursal(sucursalId)]);
     const supervisorId = (promoter?.supervisor || "").trim().toLowerCase();
     if (!supervisorId) return; // sin supervisor asignado, no hay a quién avisar
     await appendNotification({
@@ -397,8 +413,8 @@ export async function notifyCheckIn(promoterId, sucursalId, checkInTime = new Da
       idPromotor: promoterId,
       promotor: promoter?.name || promoterId,
       idSucursal: sucursalId,
-      tienda: store?.name || sucursalId,
-      detalle: `${promoter?.name || promoterId} hizo check-in en ${store?.name || sucursalId}.${puntualidadTexto(promoter, checkInTime)}`,
+      sucursal: sucursal ? `${sucursal.clienteNombre} – ${sucursal.name}` : sucursalId,
+      detalle: `${promoter?.name || promoterId} hizo check-in en ${sucursal ? `${sucursal.clienteNombre} – ${sucursal.name}` : sucursalId}.${puntualidadTexto(promoter, checkInTime)}`,
     });
   } catch (e) {
     console.error("[db] notifyCheckIn falló:", e.message);
@@ -430,48 +446,48 @@ export async function getCheckinPhoto(promoterId, sucursalId, fecha) {
   }
 }
 
-// Unidades-equivalentes (rollos + cubetas ponderadas, ver goalUnits) que un
-// promotor lleva vendidas ESTA SEMANA, siempre desde la base de datos real
-// (el check-out de un promotor ya escribe ahí sin importar VISITS_SOURCE —
-// eso solo afecta cómo se reconstruye la vista del gerente/supervisor en
-// desarrollo local).
-async function weekToDateUnitsForPromoter(promoterId, week = resolveRange("week")) {
-  const sum = await prisma.visitRecord.aggregate({
-    where: { promoterId, day: { gte: week.from, lte: week.to } },
-    _sum: { rollos: true, cubetas: true },
+// Unidades-equivalentes que un promotor o una sucursal llevan vendidas ESTA
+// SEMANA (cantidad × equivalencia por producto, incluyendo productos ya
+// desactivados). `where` filtra las visitas: { promoterId } o { sucursalId }.
+async function weekToDateUnits(where, week = resolveRange("week")) {
+  const grouped = await prisma.visitItem.groupBy({
+    by: ["productoId"],
+    where: { visit: { ...where, day: { gte: week.from, lte: week.to } } },
+    _sum: { cantidad: true },
   });
-  return goalUnits({ rollos: sum._sum.rollos, cubetas: sum._sum.cubetas });
+  const items = grouped.map((g) => ({ productoId: g.productoId, cantidad: g._sum.cantidad || 0 }));
+  return unitsOf(items, await getCatalogoProductos());
 }
 
 // Meta y avance de la SEMANA del promotor logueado (personalizada o el
 // default) — lo consume su propia app ("Mi meta de ventas" en el dashboard
 // de campo).
 export async function getMyGoalProgress(promoterId) {
-  const target = (await getPromoterGoal(promoterId)) ?? DEFAULT_WEEKLY_GOAL_ROLLOS;
-  const achieved = await weekToDateUnitsForPromoter(promoterId);
+  const target = (await getPromoterGoal(promoterId)) ?? DEFAULT_WEEKLY_GOAL_UNITS;
+  const achieved = await weekToDateUnits({ promoterId });
   return { target, achieved, reached: achieved >= target };
 }
 
 // Fija (crea o reemplaza) la meta SEMANAL personalizada de un promotor, en
 // unidades-equivalentes de rollo. Lo usa el botón "Meta" del tablero del
-// gerente/admin, como EXCEPCIÓN al default (DEFAULT_WEEKLY_GOAL_ROLLOS).
+// gerente/admin, como EXCEPCIÓN al default (DEFAULT_WEEKLY_GOAL_UNITS).
 // `nombre` es solo para que la fila del Sheet sea legible a simple vista.
 export async function setPromoterGoal(promoterId, meta, nombre) {
   await setPromoterGoalInSheet(promoterId, meta, nombre);
 }
 
-// Se llama al hacer CHECK-OUT: si el promotor o la tienda ya llegaron a su
-// meta SEMANAL (unidades-equivalentes, ver goalUnits), notifica UNA sola vez
+// Se llama al hacer CHECK-OUT: si el promotor o la sucursal ya llegaron a su
+// meta SEMANAL (unidades-equivalentes, ver units.js), notifica UNA sola vez
 // por semana (idempotente vía hasGoalNotification, no por detección exacta
 // del cruce). El promotor SIEMPRE tiene meta (personalizada o el default); la
-// tienda solo si tiene una personalizada en el Sheet.
+// sucursal solo si tiene una personalizada en el Sheet.
 export async function checkAndNotifyGoals(promoterId, sucursalId) {
   try {
     const week = resolveRange("week");
     const periodo = week.from; // "YYYY-MM-DD" del lunes de esa semana
 
-    const promoterGoal = (await getPromoterGoal(promoterId)) ?? DEFAULT_WEEKLY_GOAL_ROLLOS;
-    const achieved = await weekToDateUnitsForPromoter(promoterId, week);
+    const promoterGoal = (await getPromoterGoal(promoterId)) ?? DEFAULT_WEEKLY_GOAL_UNITS;
+    const achieved = await weekToDateUnits({ promoterId }, week);
     if (achieved >= promoterGoal && !(await hasGoalNotification({ tipo: "promoter_goal", id: promoterId, periodo }))) {
       const promoter = await findPromoterById(promoterId);
       const supervisorId = (promoter?.supervisor || "").trim().toLowerCase();
@@ -485,22 +501,19 @@ export async function checkAndNotifyGoals(promoterId, sucursalId) {
       });
     }
 
-    const storeGoal = await getSucursalGoal(sucursalId);
-    if (storeGoal) {
-      const sum = await prisma.visitRecord.aggregate({
-        where: { sucursalId, day: { gte: week.from, lte: week.to } },
-        _sum: { rollos: true, cubetas: true },
-      });
-      const storeAchieved = goalUnits({ rollos: sum._sum.rollos, cubetas: sum._sum.cubetas });
-      if (storeAchieved >= storeGoal && !(await hasGoalNotification({ tipo: "store_goal", id: sucursalId, periodo }))) {
-        const store = await getSucursal(sucursalId);
+    const sucursalGoal = await getSucursalGoal(sucursalId);
+    if (sucursalGoal) {
+      const sucursalAchieved = await weekToDateUnits({ sucursalId }, week);
+      if (sucursalAchieved >= sucursalGoal && !(await hasGoalNotification({ tipo: "sucursal_goal", id: sucursalId, periodo }))) {
+        const sucursal = await getSucursal(sucursalId);
+        const nombre = sucursal ? `${sucursal.clienteNombre} – ${sucursal.name}` : sucursalId;
         await appendNotification({
-          tipo: "store_goal",
+          tipo: "sucursal_goal",
           para: "admin",
           idSucursal: sucursalId,
-          tienda: store?.name || sucursalId,
+          sucursal: nombre,
           periodo,
-          detalle: `${store?.name || sucursalId} alcanzó su meta semanal (${storeAchieved.toFixed(1)}/${storeGoal} unidades).`,
+          detalle: `${nombre} alcanzó su meta semanal (${sucursalAchieved.toFixed(1)}/${sucursalGoal} unidades).`,
         });
       }
     }
@@ -510,9 +523,9 @@ export async function checkAndNotifyGoals(promoterId, sucursalId) {
 }
 
 // --- Perfil del promotor (resumen) -------------------------------------------
-// Datos + tiendas frecuentes + última foto. YA NO trae el historial completo
+// Datos + sucursales frecuentes + última foto. YA NO trae el historial completo
 // (ver getPromoterHistoryPage abajo, paginado por día) — antes traía hasta
-// 200 visitas completas solo para sacar de ahí las tiendas más frecuentes y
+// 200 visitas completas solo para sacar de ahí las sucursales más frecuentes y
 // la foto más reciente, cuando eso se puede calcular en la base de datos sin
 // traer las filas a memoria. Se usa desde el tablero del gerente/admin, del
 // supervisor (solo SUS promotores) y del propio promotor (su "Perfil").
@@ -520,7 +533,7 @@ export async function getPromoterProfile(promoterId) {
   const promoter = await findPromoterById(promoterId);
   if (!promoter) return null;
 
-  // Tiendas más frecuentes: se agrupa y cuenta EN LA BASE DE DATOS
+  // Sucursales más frecuentes: se agrupa y cuenta EN LA BASE DE DATOS
   // (groupBy), no trayendo cada visita a memoria para contarlas en JS.
   const grouped = await prisma.visitRecord.groupBy({
     by: ["sucursalId"],
@@ -529,12 +542,12 @@ export async function getPromoterProfile(promoterId) {
     orderBy: { _count: { sucursalId: "desc" } },
     take: 8,
   });
-  const storeIds = grouped.map((g) => g.sucursalId);
-  const stores = storeIds.length ? await prisma.store.findMany({ where: { id: { in: storeIds } }, select: { id: true, name: true } }) : [];
-  const storeNameById = new Map(stores.map((s) => [s.id, s.name]));
+  const sucursalIds = grouped.map((g) => g.sucursalId);
+  const sucursales = sucursalIds.length ? await prisma.sucursal.findMany({ where: { id: { in: sucursalIds } }, select: { id: true, name: true } }) : [];
+  const sucursalNameById = new Map(sucursales.map((s) => [s.id, s.name]));
   const frequentSucursales = grouped.map((g) => ({
     sucursalId: g.sucursalId,
-    sucursalName: storeNameById.get(g.sucursalId) || g.sucursalId,
+    sucursalName: sucursalNameById.get(g.sucursalId) || g.sucursalId,
     visits: g._count.sucursalId,
   }));
 
@@ -581,21 +594,23 @@ export async function getPromoterHistoryPage(promoterId, { page = 1, daysPerPage
 
   const rows = await prisma.visitRecord.findMany({
     where: { promoterId, day: { in: pageDays } },
-    include: { store: true },
+    include: { sucursal: { include: { cliente: true } }, ...ITEMS_INCLUDE },
     orderBy: [{ day: "desc" }, { checkInTime: "desc" }],
     omit: { photo: true },
   });
+  const catalog = await getCatalogoProductos();
 
   const byDay = new Map(pageDays.map((d) => [d, []]));
   for (const v of rows) {
     byDay.get(v.day)?.push({
       sucursalId: v.sucursalId,
-      sucursalName: v.store?.name || v.sucursalId,
+      sucursalName: v.sucursal?.name || v.sucursalId,
+      clienteNombre: v.sucursal?.cliente?.nombre ?? null,
       status: v.status,
       checkInTime: v.checkInTime,
       checkOutTime: v.checkOutTime,
-      rollos: v.rollos,
-      cubetas: v.cubetas,
+      items: v.items,
+      units: unitsOf(v.items, catalog),
     });
   }
   const days = pageDays.map((d) => ({ day: d, visits: byDay.get(d) ?? [] }));

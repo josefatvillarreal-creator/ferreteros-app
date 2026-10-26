@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // Perfil de un promotor: historial de check-in/check-out, su supervisor y las
-// tiendas a las que suele ir. Lo puede ver: admin/gerente (cualquier
+// sucursales a las que suele ir. Lo puede ver: admin/gerente (cualquier
 // promotor), un supervisor (SOLO los suyos) o el propio promotor (SOLO el
 // suyo) — se valida abajo.
 // ---------------------------------------------------------------------------
