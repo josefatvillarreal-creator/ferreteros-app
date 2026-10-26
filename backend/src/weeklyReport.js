@@ -80,7 +80,7 @@ export async function maybeSendWeeklyReports() {
     await appendNotification({ tipo: "weekly_report", para: "admin", detalle: summaryLine(adminSummary) });
     await sendMail({
       to: config.adminReportEmail,
-      subject: "Reporte semanal — App Promotores",
+      subject: "Reporte semanal — Ferreteros APP",
       html: summaryHtml(adminSummary, "Resumen semanal (nacional)"),
     });
 

@@ -1107,7 +1107,7 @@ export default function PromotoresApp() {
         <div style={{ width: "100%", maxWidth: 360, background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: "32px 28px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
             <img src="/icon-192.png" alt="Protexa" style={{ width: 34, height: 34, borderRadius: 9, display: "block" }} />
-            <span style={{ fontFamily: "Inter", fontSize: 11, letterSpacing: "0.1em", color: COLORS.textMuted, fontWeight: 600 }}>PROMOTORÍA PROTEXA</span>
+            <span style={{ fontFamily: "Inter", fontSize: 11, letterSpacing: "0.1em", color: COLORS.textMuted, fontWeight: 600 }}>FERRETEROS PROTEXA</span>
           </div>
 
           {authView === "login" ? (

@@ -1,13 +1,20 @@
-# App Promotores — Manual de desarrollo
+# Ferreteros APP — Manual de desarrollo
 
 SPA de React (Vite), PWA instalable, + backend Node/Express con Prisma. Tres
 roles (**promotor**, **supervisor**, **gerente/admin**), cada uno con su propia
 pantalla. **Login con ID + contraseña** (verificada con **bcrypt** en el
 servidor); la sesión viaja en una cookie **HttpOnly** con protección CSRF.
 Google Sheets es la fuente de datos/configuración del negocio (promotores,
-tiendas, usuarios administrativos, metas, notificaciones, competencia); Prisma
+clientes, sucursales, productos, usuarios administrativos, metas,
+notificaciones, competencia); Prisma
 (SQLite en local, PostgreSQL en Render) es la base de datos real de la app.
 
+> **Ferreteros APP** es la versión de la app de promotoría orientada a **clientes
+> ferreteros**: un **cliente** tiene varias **sucursales** (ahí se hace el
+> check-in/out por GPS) y cada visita registra cantidades de los **productos**
+> del catálogo (configurable en el Sheet). Es un proyecto independiente: tiene su
+> propio repo, base de datos, Sheet y servicio de Render.
+>
 > Para el propósito de negocio de cada función, ver [OBJETIVOS.md](OBJETIVOS.md).
 > Para desplegar (local o en Render), ver [MANUAL_DESPLIEGUE.md](MANUAL_DESPLIEGUE.md).
 
@@ -30,7 +37,7 @@ Promotor / Supervisor / Gerente-Admin
 - **Backend** (`backend/`): Node + Express. Cada área de negocio es un archivo
   de rutas bajo `backend/src/routes/` que llama a `backend/src/db.js` (la única
   capa que toca Prisma directamente).
-- **Google Sheets**: además de ser el *seed* de promotores/tiendas/usuarios, es
+- **Google Sheets**: además de ser el *seed* de promotores/catálogo/usuarios, es
   la fuente de configuración editable a mano (metas de venta, notificaciones) —
   ver la sección de abajo. **Las fotos nunca se guardan en un Sheet** (celdas no
   son buen lugar para binarios): siempre van a la base de datos.
@@ -39,7 +46,7 @@ Promotor / Supervisor / Gerente-Admin
 
 | Rol | Pantalla | Ve |
 |---|---|---|
-| `promotor` | `PromotoresApp.jsx` | Sus tiendas cercanas, check-in/out con foto (rollos/cubetas), su meta de ventas de la semana, reporta competencia, su perfil, recuperar su contraseña |
+| `promotor` | `PromotoresApp.jsx` | Sus sucursales cercanas, check-in/out con foto y cantidades por producto, su meta de ventas de la semana, reporta competencia, su perfil, recuperar su contraseña |
 | `supervisor` | `SupervisorDashboard.jsx` | Mapa + resumen **solo de SUS promotores** (los que tienen su nombre en la columna SUPERVISOR de la pestaña Promotores) |
 | `gerente` / `admin` | `ManagerDashboard.jsx` | Mapa + resumen **nacional**, puede fijar la meta de cualquier promotor, exporta CSV/Excel |
 
@@ -52,7 +59,7 @@ distinto (no busca una ficha de promotor para ellos).
 ## Estructura de carpetas
 
 ```
-APP-PROMOTORES/
+ferreteros-app/
 ├─ src/                        # Frontend (React + Vite)
 │  ├─ AppRouter.jsx             # Enrutador por rol (el único "router" que hay)
 │  ├─ PromotoresApp.jsx         # App de campo (promotor)
@@ -92,13 +99,15 @@ APP-PROMOTORES/
 │  │  ├─ goalsSheet.js            # Metas: lectura Y escritura (el botón "Meta" del admin)
 │  │  ├─ notificationsSheet.js    # Notificaciones: lectura Y escritura
 │  │  ├─ competitionSheet.js      # Fila-resumen de un reporte de competencia
-│  │  ├─ activitySheet.js         # SOLO desarrollo local: reconstruye el resumen del
-│  │  │                           # gerente desde el Sheet cuando VISITS_SOURCE=sheet
+│  │  ├─ units.js                 # PURO: unidades-equivalentes, dinero y validación de items
+│  │  ├─ catalogParsers.js        # PURO: filas del Sheet/CSV → clientes, sucursales, productos
+│  │  ├─ catalogSync.js           # Sincroniza Clientes/Productos/Sucursales del Sheet a la BD
+│  │  ├─ devUsers.js              # DEV_USERS: admin/gerente/supervisor locales sin Sheet
 │  │  ├─ managerSummary.js        # Agregación PURA (sin BD) del resumen del gerente
 │  │  ├─ threadsDb.js             # Hilos tipo foro (supervisor↔admin y tickets): modelo y paginación
 │  │  ├─ trainingSheet.js         # Contenido de Capacitación/Soporte desde el Sheet
 │  │  ├─ feedbackAlertsSheet.js   # Config de las alertas de retroalimentación (Sheet)
-│  │  ├─ presenceSheet.js         # Confirmaciones de "sigo en tienda"
+│  │  ├─ presenceSheet.js         # Confirmaciones de "sigo en la sucursal"
 │  │  ├─ weeklyReport.js / mailer.js  # Reporte semanal (in-app + correo SMTP opcional)
 │  │  └─ routes/                  # auth, stores, visits, feedback, competition,
 │  │                               # manager, supervisor, notifications, promoterProfile,
@@ -137,10 +146,9 @@ relevantes para entender el sistema:
 | Variable | Qué controla |
 |---|---|
 | `AUTH_SOURCE` | `db` (Prisma) o `sheet` (login contra la pestaña Promotores/Usuarios del Sheet — lo normal en producción) |
-| `STORES_SOURCE` | `db` o `sheet` (sincroniza el catálogo de tiendas desde la pestaña Tiendas) |
-| `VISITS_SOURCE` | `db` (fuente real) o `sheet` — **solo para desarrollo local**: reconstruye el resumen del gerente desde la pestaña "Actividad Diaria" del Sheet, porque la base local no tiene actividad real (esa vive en el Postgres de producción) |
+| `CATALOG_SOURCE` | `db` o `sheet` (sincroniza Clientes, Sucursales y Productos desde las pestañas del Sheet, ver "Carga gradual") |
+| `DEV_USERS` | **Solo desarrollo local sin Sheet:** `id:rol:Nombre:contraseña` separados por `;` (admin/gerente/supervisor). Se ignora con `NODE_ENV=production` o con el Sheet configurado |
 | `GOOGLE_SHEETS_ID` + credenciales del Service Account | Documento de Google Sheets que actúa como fuente de datos |
-| `PRECIO_ROLLO` / `PRECIO_CUBETA` | Para calcular "dinero vendido" en los tableros; en 0 no rompe nada, solo se ven cantidades en vez de montos |
 | `CHECK_IN_RADIUS_METERS` / `NEARBY_RADIUS_METERS` | Reglas de geolocalización del check-in |
 
 ## Google Sheets: fuente de datos y configuración
@@ -150,14 +158,16 @@ Todo vive en **un solo documento** ("BBDD Promotores"), con estas pestañas:
 | Pestaña | Para qué | Quién la lee/escribe |
 |---|---|---|
 | **Promotores** | ID, nombre, ubicación, supervisor, **estado** (uno de los 32 estados de México, fijo por promotor — alimenta el filtro de estado del gerente), contraseña (hash) de cada promotor | Login de promotores (`promotersSheet.js`); todos los tableros leen aquí el nombre de supervisor y el estado de cada promotor |
-| **Tiendas** | Catálogo global de tiendas (num, nombre, lat, lng, **estado**) | `storesSheet.js`, sincroniza a la BD local con `STORES_SOURCE=sheet` |
+| **Clientes** | ID, Cliente, Estado (opcional) | `catalogSync.js`, con `CATALOG_SOURCE=sheet` |
+| **Sucursales** | Num, ClienteID, Sucursal, Dirección, Latitud, Longitud, Estado — catálogo global de sucursales de cada cliente | `catalogSync.js` (ver "Carga gradual") |
+| **Productos** | ID, Producto, Unidad, Equivalencia (peso en la meta), Precio, Activo (SI/NO) | `catalogSync.js`; `Activo = NO` lo oculta del formulario pero conserva su historial |
 | **Usuarios** | ID, nombre, rol (`admin`\|`gerente`\|`supervisor`), contraseña (hash) | Login de administración (`usersSheet.js`) — **nunca** promotores de campo |
-| **Metas** | Tipo (`promotor`\|`tienda`), ID, nombre, meta semanal en **unidades-equivalentes** (rollos + cubetas ponderadas, default 30/semana si no hay fila) | `goalsSheet.js` — el botón "Meta" del tablero de admin **escribe** aquí |
-| **Notificaciones** | Registro de check-in, meta de promotor/tienda alcanzada, solicitud de recuperación de contraseña, reporte semanal | `notificationsSheet.js` — se escribe sola desde el backend, nadie la edita a mano |
+| **Metas** | Tipo (`promotor`\|`sucursal`), ID, nombre, meta semanal en **unidades-equivalentes** (cantidad × equivalencia de cada producto, default 30/semana si no hay fila) | `goalsSheet.js` — el botón "Meta" del tablero de admin **escribe** aquí |
+| **Notificaciones** | Registro de check-in, meta de promotor/sucursal alcanzada, solicitud de recuperación de contraseña, reporte semanal | `notificationsSheet.js` — se escribe sola desde el backend, nadie la edita a mano |
 | **Competencia** | Fila-resumen (fecha, promotor, marca, descripción, nº de fotos) de cada reporte | `competitionSheet.js` **escribe** aquí; el panel de revisión (`CompetenciaPanel.jsx`) **lee** de la base de datos, no de esta pestaña — las fotos NO están aquí, viven en `CompetitionReport` |
-| **Actividad Diaria** | Auditoría de cada check-in/check-out: entrada, salida, rollos, cubetas (la escribe `sheets.js`) | Solo lectura en desarrollo local (`VISITS_SOURCE=sheet`); en producción el resumen del gerente usa la base de datos real, no esta pestaña |
+| **Actividad Diaria** | Auditoría de cada check-in/check-out: cliente, sucursal, entrada, salida, productos ("Rollo: 3; Cubeta: 2") y unidades (la escribe `sheets.js`) | Solo escritura; el resumen del gerente usa la base de datos real, no esta pestaña |
 | **Retroalimentacion** | Reportes de "algo no funciona" desde la app del promotor **y** reportes de "comportamiento extraño" que admin/gerente/supervisor levantan desde el historial de un promotor (mismo formato, distinto `enviado_por`) | `sheets.js` (`appendFeedbackRow`) |
-| **Confirmación en tienda** | Respuesta Sí/No a "¿sigues en la tienda?" con la ubicación del momento | `presenceSheet.js` (solo escribe) |
+| **Confirmación en tienda** | Respuesta Sí/No a "¿sigues en la sucursal?" con la ubicación del momento | `presenceSheet.js` (solo escribe) |
 | **Capacitacion**, **Capacitacion_Quiz**, **Capacitacion_Flashcards** | Contenido de las secciones Capacitación y Soporte (columna `Seccion` las distingue). Se crean solas con encabezados | `trainingSheet.js` (lee, con caché) |
 | **AlertasRetroConfig**, **AlertasRetroDestinatarios** | Activo (SI/NO) + tema de ntfy.sh, y la lista de correos que reciben la alerta de retroalimentación nueva | `feedbackAlertsSheet.js` (desde el tablero del admin); las envía un Google Apps Script (ver MANUAL_DESPLIEGUE.md) |
 
@@ -191,13 +201,43 @@ node prisma/seed.js     # datos DEMO de prisma/seed-data (1 promotor, 2 clientes
 > producción el catálogo viene del Google Sheet (`CATALOG_SOURCE=sheet`) y los CSV
 > reales van como *Secret Files* (`SEED_DIR`).
 
+## Carga gradual del catálogo (Clientes, Sucursales, Productos)
+
+El catálogo se llena **poco a poco** en el Sheet (plantillas con encabezados en
+`plantillas/*.csv`); con `CATALOG_SOURCE=sheet` se sincroniza a la BD cada 5 min
+(`CATALOG_CACHE_TTL_MS`) en este orden: **Clientes → Productos → Sucursales**.
+Una fila incompleta no rompe nada: se **omite** y el motivo queda en el log del
+backend (`[catalogSync] N fila(s) omitida(s)`, con pestaña y número de fila):
+
+- Sucursal sin **Latitud/Longitud** (celda vacía o inválida): se omite — nunca se
+  coloca en 0,0. No se puede hacer check-in ahí hasta completarla.
+- Sucursal con **ClienteID** vacío o que no está en la pestaña Clientes: se omite.
+- **Num** vacío o repetido (gana la primera fila): se omite.
+- Producto con equivalencia/precio inválidos: se omite. `Activo = NO` lo oculta del
+  formulario de check-out pero conserva sus ventas en historial, metas y tableros.
+- Si el Sheet no responde o una pestaña está vacía, se conserva lo ya
+  sincronizado; `/api/sucursales` responde `[]` (no 500).
+
+## Desarrollo local sin Google Sheet
+
+Con `AUTH_SOURCE=db`, `CATALOG_SOURCE=db` y SQLite (ver "Base de datos"), el seed
+trae un promotor demo (`90500276` / `demo1234`), 2 clientes, 4 sucursales en
+Morelia y 3 productos (Rollo 1.0, Cubeta 0.6, Galón 0). Para entrar como
+admin/gerente/supervisor define `DEV_USERS` en `backend/.env`, p. ej.
+`DEV_USERS=gerente:gerente:Gerente Demo:demo1234;supervisor demo:supervisor:Supervisor Demo:demo1234`
+(el ID de un supervisor es su nombre en minúsculas tal como aparece en la
+columna Supervisor de Promotores). Para simular el GPS en el navegador usa
+DevTools → Sensors con las coordenadas de la sucursal. Pruebas del backend:
+`cd backend && npm test` (`node:test`, sin dependencias nuevas).
+
 ## Metas de venta
 
-Semanales, en **unidades-equivalentes de rollo** (1 rollo = 1 unidad, 1 cubeta
-= 0.6 unidades — así 30 rollos y 50 cubetas llegan al mismo default; los
-galones no cuentan), no en dinero (decisión de producto). Sin fila
+Semanales, en **unidades-equivalentes**: cada producto aporta cantidad × su
+`Equivalencia` (pestaña Productos; p. ej. Rollo = 1, Cubeta = 0.6, un producto con
+equivalencia 0 no cuenta para la meta), no en dinero (decisión de producto). Los
+productos desactivados siguen sumando por sus ventas ya hechas. Sin fila
 personalizada en "Metas" = usa el default automático (30/semana); una fila sí
-la reemplaza (`goalsSheet.js` → `DEFAULT_WEEKLY_GOAL_ROLLOS`, `goalUnits`).
+la reemplaza (`goalsSheet.js` → `DEFAULT_WEEKLY_GOAL_UNITS`; cálculo en `units.js`).
 
 - **Ver:** todos los tableros calculan el avance del mes desde la base de
   datos real (`db.js` → `attachGoalProgress` / `getMyGoalProgress`).
@@ -215,12 +255,12 @@ Centro **dentro de la app** (campana, se actualiza sola cada 30s) — no hay pus
 real al sistema operativo. Cinco tipos, guardados en la pestaña "Notificaciones":
 
 1. **`checkin`** — un promotor hizo check-in → aviso a **su supervisor** (con
-   tienda, nombre y si llegó a tiempo o tarde contra su hora de "Entrada", con
+   sucursal, nombre y si llegó a tiempo o tarde contra su hora de "Entrada", con
    `LATE_TOLERANCE_MINUTES` = 15; la hora se compara en la zona horaria del
    estado del promotor).
 2. **`promoter_goal`** — un promotor alcanzó su meta semanal → aviso a **su
    supervisor** (una sola vez por periodo, idempotente).
-3. **`store_goal`** — una tienda alcanzó su meta semanal → aviso a **admin**.
+3. **`sucursal_goal`** — una sucursal alcanzó su meta semanal → aviso a **admin**.
 4. **`password_recovery`** — alguien pidió recuperar su cuenta desde el login
    → aviso a su supervisor (o a "admin" si es un promotor sin supervisor, o
    si quien la pidió es admin/gerente/supervisor). No resetea nada por sí
@@ -246,7 +286,7 @@ Admin/gerente además ven un **insight en vivo** (Top 5 vendedores del día), qu
   este mes, el mes pasado, este año, el año pasado — todos en hora de México.
 - **Filtro de estado**: lista siempre los **32 estados de México**
   (`MEXICO_ESTADOS` en `dashboardShared.jsx`), no solo los que tengan
-  actividad en el rango — depende de que la pestaña "Tiendas" tenga la
+  actividad en el rango — depende de que la pestaña "Sucursales" tenga la
   columna ESTADO capturada; si no, todo cae en "Sin estado".
 - **KPIs interactivos**: cada tarjeta (`Kpi`) tiene un `tooltip` (hover) que
   explica qué mide, y un `onClick` que aplica el mismo filtro de segmento
@@ -287,14 +327,14 @@ reabrirla manualmente en cualquier momento.
 
 Modal (`PromoterProfile.jsx`) con dos pantallas:
 
-1. **Overview** (por defecto): nombre, supervisor, tiendas más frecuentes, y
+1. **Overview** (por defecto): nombre, supervisor, sucursales más frecuentes, y
    un botón-menú "Historial de check-in / check-out →" con el total de
    visitas.
 2. **Historial** (se abre al hacer clic en ese menú, con flecha ← para
    volver): las visitas **agrupadas por día**. Cada visita tiene un ícono de
    alerta ⚠️ que abre un mini-formulario inline para reportar un
    **comportamiento extraño** puntual (ej. checkout casi inmediato al
-   check-in, cero ventas en una tienda donde normalmente sí vende).
+   check-in, cero ventas en una sucursal donde normalmente sí vende).
 
 Ese reporte se guarda con el **mismo formato y en la misma pestaña** que la
 retroalimentación de los promotores (`POST /api/promoters/:id/report-behavior`
@@ -363,13 +403,13 @@ MANUAL_DESPLIEGUE.md). El backend solo lee y escribe la configuración
 desde el panel del tablero (`FeedbackAlertsPanel.jsx`): encender/apagar, tema
 de ntfy y destinatarios. Solo admin/gerente.
 
-## Confirmación de "sigo en tienda"
+## Confirmación de "sigo en la sucursal"
 
 Una vez al día, en un momento aleatorio entre 10 am y 4 pm y solo mientras el
 promotor tiene un check-in abierto, la app le pregunta Sí/No. Al responder se
 intenta capturar su GPS (si falla o lo niega, la respuesta no se bloquea) y se
 guarda una fila en la pestaña `Confirmación en tienda`. No se revalida contra
-el radio de la tienda. Ruta: `POST /api/visits/:storeId/confirm-presence`.
+el radio de la sucursal. Ruta: `POST /api/visits/:sucursalId/confirm-presence`.
 
 ## Recordatorio de check-out
 
@@ -387,12 +427,13 @@ Rutas bajo `VITE_API_BASE` (por defecto `/api`, mismo origen).
 | POST | `/auth/recover-request` | público | `{ promoterId }`. No resetea nada: avisa al supervisor (o admin) que hace falta una contraseña nueva. Misma respuesta exista o no el ID. |
 | GET | `/auth/session` | cualquiera con sesión | `{ id, name, role, ...(location/supervisor si es promotor) }` |
 | POST | `/auth/logout` | cualquiera con sesión | Invalida la sesión |
-| GET | `/stores?lat=&lng=` | promotor | Tiendas dentro de ~2 km (Haversine) |
-| GET | `/stores/all` | promotor | Catálogo completo (para el mapa de Inicio) |
-| POST | `/visits/:storeId/check-in` | promotor | `{ coords, photo }`. Foto obligatoria. |
-| POST | `/visits/:storeId/check-out` | promotor | `{ coords, rollos, cubetas }`. Escribe la fila en Actividad Diaria + revisa metas. |
+| GET | `/sucursales?lat=&lng=` | promotor | Sucursales (con `clienteNombre`) dentro de ~2 km (Haversine) |
+| GET | `/sucursales/all` | promotor | Catálogo completo (para el mapa de Inicio) |
+| GET | `/productos` | cualquiera con sesión | Productos **activos**: `{ productos: [{ id, nombre, unidad, orden }] }` |
+| POST | `/visits/:sucursalId/check-in` | promotor | `{ coords, photo }`. Foto obligatoria. |
+| POST | `/visits/:sucursalId/check-out` | promotor | `{ coords, items: [{ productoId, cantidad }] }`. Solo cuentan productos activos (cantidades enteras ≥ 0); sin items válidos se registra con todo en 0. Escribe la fila en Actividad Diaria + revisa metas. |
 | GET | `/visits/today` | promotor | Visitas de hoy del promotor logueado |
-| POST | `/visits/:storeId/confirm-presence` | promotor | `{ sigueEnTienda, coords? }`. Respuesta a "¿sigues en la tienda?"; exige check-in abierto (409 si no). |
+| POST | `/visits/:sucursalId/confirm-presence` | promotor | `{ sigueEnTienda, coords? }`. Respuesta a "¿sigues en la sucursal?"; exige check-in abierto (409 si no). |
 | GET | `/visits/my-goal` | promotor | Su meta semanal y avance, o `null` |
 | POST | `/feedback` | promotor | Reporte de "algo no funciona" |
 | POST | `/competition` | promotor | `{ marca, descripcion, fotos? }` (hasta 5) |
@@ -425,7 +466,7 @@ Rutas bajo `VITE_API_BASE` (por defecto `/api`, mismo origen).
 | Script | Para qué |
 |---|---|
 | `create-user.mjs <ID> <admin\|gerente\|supervisor> "<Nombre>" [--password]` | Alta/edición en la pestaña Usuarios. El ID de un supervisor debe ser su nombre en minúsculas (así se filtran sus promotores). |
-| `set-goal.mjs <promotor\|tienda> <ID> <META> ["<Nombre>"]` | Alta/edición de UNA meta en la pestaña Metas. |
+| `set-goal.mjs <promotor\|sucursal> <ID> <META> ["<Nombre>"]` | Alta/edición de UNA meta en la pestaña Metas. |
 | `seed-promoter-goals.mjs [META]` | Siembra una meta placeholder para todos los promotores que aún no tengan una (no pisa las existentes). |
 | `reset-password.mjs <ID_PROMOTOR>` | Genera y guarda una contraseña nueva para un promotor. |
 | `inspect-sheet.mjs` | Imprime la estructura real (pestañas, encabezados, muestras) del Sheet — úsalo antes de asumir cómo está organizado. |

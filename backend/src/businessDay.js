@@ -39,7 +39,7 @@ const MEXICO_STATE_TIMEZONES = {
   "Quintana Roo": "America/Cancun",
 };
 
-// Zona horaria real para el ESTADO de un promotor/tienda (columna "Estado").
+// Zona horaria real para el ESTADO de un promotor/sucursal (columna "Estado").
 // Sin estado, o estado no listado arriba (la mayoría del país): la zona de
 // negocio por default (Ciudad de México).
 export function timeZoneForEstado(estado) {

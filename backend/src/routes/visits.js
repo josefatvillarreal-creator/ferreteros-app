@@ -191,7 +191,7 @@ router.post("/:sucursalId/check-out", async (req, res) => {
 });
 
 // POST /api/visits/:sucursalId/confirm-presence  { coords?, sigueEnTienda }
-// Confirmación de "sigo en tienda" — la dispara el cliente una vez al día, en
+// Confirmación de "sigo en la sucursal" — la dispara el cliente una vez al día, en
 // un momento aleatorio entre 10am y 4pm, solo mientras el promotor tiene un
 // check-in abierto en esa sucursal, preguntándole Sí/No. `coords` es best-effort
 // (el cliente intenta tomar el GPS al responder, pero si falla o lo niega, NO

@@ -63,7 +63,7 @@ router.post("/auth/recover-request", async (req, res) => {
 });
 
 // GET /api/auth/session -> { id, name, role, location?, supervisor?, checkInRadiusMeters }
-// Las tiendas ya NO vienen aquí: se obtienen por cercanía en GET /api/sucursales.
+// Las sucursales ya NO vienen aquí: se obtienen por cercanía en GET /api/sucursales.
 // El `role` (del JWT) le dice al frontend qué pantalla mostrar: gerente/admin →
 // tablero del gerente; promotor → app de campo.
 router.get("/auth/session", requireAuth, async (req, res) => {

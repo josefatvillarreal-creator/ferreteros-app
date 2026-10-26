@@ -5,7 +5,7 @@
 //   1. El promotor ingresa su ID y contraseña.
 //   2. POST /api/login → el backend verifica con bcrypt y, si es correcto,
 //      responde con una cookie de sesión HttpOnly (+ token CSRF).
-//   3. GET /api/auth/session carga el promotor + sus tiendas asignadas.
+//   3. GET /api/auth/session carga el promotor (las sucursales se piden por cercanía).
 //
 // El JWT nunca es accesible desde JavaScript (cookie HttpOnly); no se usa
 // localStorage. Misma seguridad que el flujo anterior.

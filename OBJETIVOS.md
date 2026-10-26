@@ -1,7 +1,8 @@
-# Objetivos — App Promotores
+# Objetivos — Ferreteros APP
 
-> Última revisión: 15-oct-2026, contra el código de la rama `pruebas`
-> (commit `dbb14d3`).
+> Versión de la app de promotoría para **clientes ferreteros** (octubre 2026).
+> Un **cliente** tiene varias **sucursales**; cada visita registra cantidades de
+> los **productos** del catálogo, que se configura en el Sheet.
 
 ## Objetivo general
 
@@ -17,7 +18,7 @@ sobre datos del día, no sobre reportes que llegan días después.
 - Registrar sus visitas (check-in/out) de forma confiable: con foto de
   evidencia y ubicación **validada por el servidor** (no por el teléfono, que
   se puede falsificar).
-- Confirmar que sigue en la tienda: una vez al día, en un momento aleatorio
+- Confirmar que sigue en la sucursal: una vez al día, en un momento aleatorio
   entre 10 am y 4 pm (solo con un check-in abierto), la app le pregunta Sí/No
   y guarda su ubicación del momento.
 - Ver su propio avance hacia su **meta semanal** de ventas, con
@@ -41,7 +42,7 @@ sobre datos del día, no sobre reportes que llegan días después.
 - Ver, en tiempo real, **únicamente** a los promotores que tiene a su cargo —
   no la operación completa del país.
 - Enterarse de inmediato cuándo uno de sus promotores hace check-in (en qué
-  tienda y si llegó a tiempo o tarde, con 15 min de tolerancia sobre su hora de
+  sucursal y si llegó a tiempo o tarde, con 15 min de tolerancia sobre su hora de
   entrada) y cuándo alcanza su meta, sin tener que revisarlo a mano.
 - Cerrar el día con el mismo tipo de resumen que usa gerencia, acotado a su
   equipo, y recibir el **reporte semanal** de KPIs de su equipo.
@@ -61,13 +62,14 @@ sobre datos del día, no sobre reportes que llegan días después.
   personalizado) y por estado del país.
 - Fijar y ajustar la meta semanal de cualquier promotor directamente desde el
   tablero, sin depender de una hoja de cálculo aparte.
-- Detectar oportunidades y riesgos rápido: Top 5 vendedores del día, tiendas
+- Detectar oportunidades y riesgos rápido: Top 5 vendedores del día, sucursales
   que alcanzan su meta, y un clic en cualquier indicador para ver en el mapa
   exactamente a quién representa.
-- Exportar la información (CSV/Excel, incluye el ID de la tienda) para reportes
+- Exportar la información (CSV/Excel, con una columna por producto e
+  incluyendo el cliente y el ID de la sucursal) para reportes
   o análisis fuera de la app, también por supervisor.
 - Poder auditar a cualquier promotor: su historial de visitas agrupado por
-  día, quién lo supervisa, a qué tiendas suele ir, y reportar un
+  día, quién lo supervisa, a qué sucursales suele ir, y reportar un
   comportamiento extraño puntual si lo nota.
 - Revisar los reportes de Competencia (marca, descripción, fotos) que
   capturan los promotores, sin abrir el Sheet.
@@ -96,7 +98,7 @@ red del celular o de la oficina lo deje pasar, y el service worker guardaba las
 teselas de otros dominios para siempre y sin límite.
 
 **Objetivo.** Un mapa que cargue de forma confiable en producción, en el
-tablero de gerente/supervisor y en la pantalla de tiendas cercanas del
+tablero de gerente/supervisor y en la pantalla de sucursales cercanas del
 promotor, sin depender de un servidor gratuito sin garantía de servicio.
 
 **Cómo sabremos que se logró:**
@@ -157,7 +159,7 @@ se guarda sin invertir y por el mismo camino que las demás). Probada en un nave
 **A definir:** el peso máximo por foto (hoy se fija por resolución y calidad
 según el nivel del equipo: de 700 a 1,280 px) y si se agrega una marca de agua
 con fecha, hora y ubicación (refuerza la evidencia de que la foto se tomó en la
-tienda).
+sucursal).
 
 #### 2.1 Diagnóstico del dispositivo y la red (base para mejoras futuras)
 
@@ -194,14 +196,15 @@ adaptar la app y entender por qué falla en campo.
 
 ## Qué mide la app hoy
 
-- **Actividad**: check-in/out por tienda y por día (hora, ubicación validada,
-  foto), y confirmaciones de "sigo en tienda".
+- **Actividad**: check-in/out por sucursal y por día (hora, ubicación validada,
+  foto), y confirmaciones de "sigo en la sucursal".
 - **Asistencia y puntualidad**: contra la hora de "Entrada" de cada promotor
   (en su zona horaria), con 15 min de tolerancia.
-- **Ventas**: rollos y cubetas vendidos por visita, acumulados por promotor y
-  por tienda (los galones ya no se usan en ningún flujo).
-- **Metas**: unidades-equivalentes vendidas (rollos + cubetas ponderadas)
-  contra una **meta semanal**, por promotor y por tienda. Sin meta
+- **Ventas**: cantidades por producto vendidas en cada visita, acumuladas por
+  promotor, sucursal, cliente y estado. Los productos se configuran en la
+  pestaña Productos del Sheet.
+- **Metas**: unidades-equivalentes vendidas (cantidad × equivalencia de cada
+  producto) contra una **meta semanal**, por promotor y por sucursal. Sin meta
   personalizada se usa el default de 30 unidades por semana.
 - **Inteligencia de competencia**: reportes cualitativos (marca, descripción,
   fotos) capturados por los propios promotores en campo, con un panel para
@@ -215,11 +218,11 @@ adaptar la app y entender por qué falla en campo.
 Esto **no** son decisiones técnicas — son datos/reglas que le corresponden al
 negocio, no al código:
 
-- **Precios reales** de rollo y cubeta (`PRECIO_ROLLO` / `PRECIO_CUBETA`): el
-  código los lee de variables de entorno con default `0`; sin ellos, los
-  tableros muestran unidades en vez de dinero vendido. *Verificar en Render
-  qué valor tienen hoy.*
-- **Metas de venta reales** por promotor y por tienda: el script
+- **Catálogo real**: clientes, sucursales (con coordenadas) y productos (con su
+  equivalencia y precio) se irán cargando poco a poco en el Sheet; las filas
+  incompletas se omiten con aviso en el log (ver README, "Carga gradual"). Sin
+  precios, los tableros muestran unidades en vez de dinero vendido.
+- **Metas de venta reales** por promotor y por sucursal: el script
   `seed-promoter-goals.mjs` siembra un valor de **prueba** para quien no tenga
   meta (la versión anterior de este documento hablaba de 40 unidades). Hay que
   revisar la pestaña "Metas" del Sheet y sustituir esos valores por las metas
@@ -238,7 +241,7 @@ negocio, no al código:
 - Si los reportes de competencia necesitan un flujo de seguimiento (¿alguien
   los debe marcar como "revisado"?) — hoy hay un panel para verlos, pero es
   de **solo lectura**, sin ese estado.
-- La columna **ESTADO** de las pestañas "Promotores" y "Tiendas": el filtro de
+- La columna **ESTADO** de las pestañas "Promotores" y "Sucursales": el filtro de
   estado del tablero ya lista los 32 estados de México, pero si esa columna no
   está capturada, la actividad cae en "Sin estado" — es captura de datos, no
   una limitación del código.
@@ -255,8 +258,8 @@ negocio, no al código:
   retroalimentación.
 - **Chat en vivo**: los hilos de supervisor↔administración y de tickets son
   estilo foro (se cargan al abrir y con el botón "Actualizar").
-- **Asignación fija de tiendas por promotor**: el catálogo es global; qué
-  tiendas ve cada promotor se calcula por cercanía GPS en tiempo real, no por
+- **Asignación fija de clientes/sucursales por promotor**: el catálogo es global;
+  qué sucursales ve cada promotor se calcula por cercanía GPS en tiempo real, no por
   una relación fija en la base de datos.
 - **Reportes automáticos programados con hora fija**: la exportación
   (CSV/Excel) es manual; el reporte semanal se dispara cuando alguien abre la

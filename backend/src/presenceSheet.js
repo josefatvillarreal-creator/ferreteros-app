@@ -1,12 +1,12 @@
 // ---------------------------------------------------------------------------
-// Confirmaciones de "sigo en tienda" — Google Sheets ("Confirmación en tienda").
+// Confirmaciones de "sigo en la sucursal" — Google Sheets (pestaña "Confirmación en tienda").
 // ---------------------------------------------------------------------------
 // La app del promotor le muestra, una vez al día en un momento aleatorio
 // entre 10am y 4pm (mientras tiene un check-in abierto), la pregunta "¿sigues
-// en la tienda?" (Sí/No). Al responder cualquiera de las dos, se captura su
+// en la sucursal?" (Sí/No). Al responder cualquiera de las dos, se captura su
 // GPS en ese momento y se guarda una fila aquí con la respuesta y esa
 // ubicación — a diferencia del check-in, esto NO se revalida contra el radio
-// de la tienda (si responde "No" lo normal es que ya esté fuera de rango).
+// de la sucursal (si responde "No" lo normal es que ya esté fuera de rango).
 // A diferencia del check-out, SÍ propagamos el error al caller (mismo
 // criterio que retroalimentación): es el registro que importa, no queremos
 // que falle en silencio sin que el promotor se entere.
@@ -16,7 +16,7 @@ import { config } from "./config.js";
 import { formatMexicoDateTime } from "./businessDay.js";
 
 const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
-const HEADERS = ["registrado_en", "id_promotor", "nombre", "supervisor", "id_tienda", "tienda", "ubicacion", "sigue_en_tienda"];
+const HEADERS = ["registrado_en", "id_promotor", "nombre", "supervisor", "id_sucursal", "sucursal", "ubicacion", "sigue_en_sucursal"];
 
 let clientPromise = null;
 let tabEnsured = false;

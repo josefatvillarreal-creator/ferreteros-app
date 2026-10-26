@@ -23,9 +23,8 @@ negocio (recomendado):
 
 ```bash
 AUTH_SOURCE=sheet
-STORES_SOURCE=sheet
-VISITS_SOURCE=sheet          # solo local: tu BD no tiene actividad real
-GOOGLE_SHEETS_ID=<id del documento "BBDD Promotores">
+CATALOG_SOURCE=sheet         # Clientes, Sucursales y Productos desde el Sheet
+GOOGLE_SHEETS_ID=<id del documento "BBDD Ferreteros">
 GOOGLE_SERVICE_ACCOUNT_KEY_FILE=./credentials/service-account.json
 DATABASE_URL="file:./dev.db"
 SESSION_SECRET=<genera uno: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))">
@@ -124,12 +123,15 @@ función que escriba ahí. Si necesitas probar un flujo que sí escribe al Sheet
 
 ## En servidor (Render)
 
-### El panorama: dos servicios, una cuenta de Render
+### El panorama: un servicio en Render (pendiente de crear)
 
-Este proyecto vive en Render bajo la cuenta de Andrea (Andrea Orantes,
-`andreaorantes-dot`), con **dos Web Services** desplegados desde su mismo
-repositorio de GitHub (`andreaorantes-dot/APP-PROMOTORES`) pero de **ramas
-distintas**:
+Ferreteros APP es un proyecto **independiente** de la app de promotoría: tiene su
+propio repositorio de GitHub (`josefatvillarreal-creator/ferreteros-app`), su
+propia base de datos PostgreSQL (`ferreteros-db`) y su propio Web Service
+(`ferreteros-app`), definidos en `render.yaml`. **Todavía no están creados**: lo
+hace quien administre la cuenta de Render (New → Blueprint → elegir el repo).
+Mientras tanto se puede probar todo en local (ver sección Local). Cuando se
+quieran dos entornos, el patrón es el mismo de siempre, con ramas distintas:
 
 - **Servidor de pruebas** (rama `pruebas`) — donde se prueban cambios antes de
   que los use el equipo real.
@@ -195,13 +197,11 @@ ambos servicios (pruebas y final) las tengan**:
 
 | Variable | Valor típico |
 |---|---|
-| `GOOGLE_SHEETS_ID` | ID del documento "BBDD Promotores" |
+| `GOOGLE_SHEETS_ID` | ID del documento "BBDD Ferreteros" (el Sheet nuevo de este proyecto, con las pestañas Clientes, Sucursales y Productos; plantillas en `plantillas/`) |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | el JSON completo del Service Account, en una línea (como **Secret File** o variable normal marcada sensible) |
 | `AUTH_SOURCE` | `sheet` |
-| `STORES_SOURCE` | `sheet` |
-| `VISITS_SOURCE` | `db` (**nunca** `sheet` en un servidor real — ahí la base de datos SÍ tiene la actividad real) |
-| `GOOGLE_SHEETS_PROMOTERS_TAB` / `_TIENDAS_TAB` / `_USUARIOS_TAB` / `_METAS_TAB` / `_NOTIFICACIONES_TAB` / `_COMPETENCIA_TAB` / `_ACTIVIDAD_TAB` | Los nombres reales de las pestañas (ver `backend/.env.example` para los valores por defecto) |
-| `PRECIO_ROLLO` / `PRECIO_CUBETA` | Los precios reales del negocio (en 0 el tablero muestra unidades en vez de dinero — no rompe nada, pero conviene ponerlos) |
+| `CATALOG_SOURCE` | `sheet` |
+| `GOOGLE_SHEETS_PROMOTERS_TAB` / `_CLIENTES_TAB` / `_SUCURSALES_TAB` / `_PRODUCTOS_TAB` / `_USUARIOS_TAB` / `_METAS_TAB` / `_NOTIFICACIONES_TAB` / `_COMPETENCIA_TAB` / `_ACTIVIDAD_TAB` | Los nombres reales de las pestañas (ver `backend/.env.example` para los valores por defecto) |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Correo del reporte semanal al admin. Con Google Workspace: `smtp.gmail.com`, `587`, la cuenta, y una **contraseña de aplicación** (no la contraseña normal si hay verificación en 2 pasos). Sin esto configurado, el reporte sigue llegando **in-app**, solo no por correo. |
 | `ADMIN_REPORT_EMAIL` | A qué dirección se manda ese correo semanal |
 

@@ -251,12 +251,12 @@ export async function getCompetitionReportPhotos(reportId, { supervisorId } = {}
 // --- Resumen para el GERENTE -------------------------------------------------
 // Agrega TODAS las visitas de un RANGO de días ("today" | "week" | "month" |
 // "year", por defecto "today") y las agrupa por promotor. Calcula el "dinero
-// vendido" multiplicando cantidades por los precios de config (PRECIO_ROLLO /
-// PRECIO_CUBETA). Devuelve totales globales, el desglose por estado (para las
-// gráficas) y un arreglo de promotores activos.
+// vendido" multiplicando cantidades por el precio de cada producto (pestaña
+// Productos). Devuelve totales globales, el desglose por estado y por cliente
+// (para las gráficas) y un arreglo de promotores activos.
 //
 // "PROMOTOR ACTIVO" = tiene al menos un registro de visita en el rango (el
-// check-in crea el registro), sin importar si ya cerró o sigue en tienda.
+// check-in crea el registro), sin importar si ya cerró o sigue en la sucursal.
 //
 // `supervisorId` (opcional) restringe el resultado a los promotores de ESE
 // supervisor (comparando, sin distinguir mayúsculas, contra la columna
@@ -306,7 +306,7 @@ export async function getManagerSummary(rangeKey = "today", { supervisorId, from
   // Plantilla completa (todos los promotores registrados, o solo los de ESE
   // supervisor) — a diferencia de `summary.promoters`, que solo incluye a
   // quien tuvo actividad en el rango. Con esto el tablero puede mostrar
-  // "cuántos faltan de estar en tienda" (y quiénes son) contra el total real,
+  // "cuántos faltan de estar en la sucursal" (y quiénes son) contra el total real,
   // no solo contra los que ya hicieron algo hoy.
   const roster = await getRoster(supervisorId);
   summary.roster = roster.map((p) => ({ id: p.id, name: p.name, estado: p.estado ?? null }));
@@ -321,7 +321,7 @@ export async function getSupervisorSummary(supervisorId, rangeKey = "today", { f
 
 // TODOS los promotores registrados (o solo los de un supervisor dado),
 // { id, name, estado }, sin importar si tuvieron actividad hoy — para poder
-// mostrar la lista de "quién falta de estar en tienda" (roster completo menos
+// mostrar la lista de "quién falta de estar en la sucursal" (roster completo menos
 // quien tiene check-in abierto ahora, ver summary.roster). Con AUTH_SOURCE=sheet
 // (el modo real) lee el Sheet directo; si no, los promotores locales conocidos.
 async function getRoster(supervisorId) {
@@ -470,7 +470,7 @@ export async function getMyGoalProgress(promoterId) {
 }
 
 // Fija (crea o reemplaza) la meta SEMANAL personalizada de un promotor, en
-// unidades-equivalentes de rollo. Lo usa el botón "Meta" del tablero del
+// unidades-equivalentes. Lo usa el botón "Meta" del tablero del
 // gerente/admin, como EXCEPCIÓN al default (DEFAULT_WEEKLY_GOAL_UNITS).
 // `nombre` es solo para que la fila del Sheet sea legible a simple vista.
 export async function setPromoterGoal(promoterId, meta, nombre) {

@@ -1,0 +1,2 @@
+ID,Nombre,Ubicación,Supervisor,Estado,Entrada,Salida,Contraseña
+90000001,Promotor Ejemplo,Michoacán,Supervisor Ejemplo,Michoacán,09:00,18:00,(hash bcrypt: ver backend/scripts/reset-password.mjs)

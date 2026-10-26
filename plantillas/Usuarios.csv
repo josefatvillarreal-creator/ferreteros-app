@@ -1,0 +1,2 @@
+ID,Nombre,Rol,Contraseña
+admin,Administrador Ejemplo,admin,(hash bcrypt: node backend/scripts/create-user.mjs admin admin "Nombre")

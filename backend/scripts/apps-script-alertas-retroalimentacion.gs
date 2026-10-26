@@ -1,5 +1,5 @@
 // =============================================================================
-// Alertas automáticas de Retroalimentación — App Promotores
+// Alertas automáticas de Retroalimentación — Ferreteros APP
 // =============================================================================
 // QUÉ HACE: cada vez que corre (por un trigger de tiempo, ver instrucciones
 // abajo), revisa si hay filas NUEVAS en la pestaña "Retroalimentacion" desde
@@ -12,7 +12,7 @@
 //     ntfy (iOS/Android) o la web.
 //
 // Ambas pestañas de configuración las administra el admin desde el tablero
-// de App Promotores (botón de la campanita "Alertas de Retroalimentación"),
+// de Ferreteros APP (botón de la campanita "Alertas de Retroalimentación"),
 // así que normalmente NO hace falta tocarlas a mano aquí.
 //
 // CÓMO INSTALARLO (una sola vez):
