@@ -476,6 +476,7 @@ Rutas bajo `VITE_API_BASE` (por defecto `/api`, mismo origen).
 | Script | Para qué |
 |---|---|
 | `create-user.mjs <ID> <admin\|gerente\|supervisor> "<Nombre>" [--password]` | Alta/edición en la pestaña Usuarios. El ID de un supervisor debe ser su nombre en minúsculas (así se filtran sus promotores). |
+| `hash-password.mjs <ID> <admin|gerente|supervisor> "<Nombre>"` | **Sin acceso al Sheet:** te pide la contraseña (oculta) y imprime la fila `ID 	 Nombre 	 Rol 	 hash` lista para pegar en la pestaña Usuarios. Ej.: `node scripts/hash-password.mjs admin admin "Administrador Ferreteros"`. Un `admin` ve lo mismo que un `gerente` (tablero nacional, buzón de tickets y chats, alertas de retroalimentación, competencia). |
 | `set-goal.mjs <promotor\|sucursal> <ID> <META> ["<Nombre>"]` | Alta/edición de UNA meta en la pestaña Metas. |
 | `seed-promoter-goals.mjs [META]` | Siembra una meta placeholder para todos los promotores que aún no tengan una (no pisa las existentes). |
 | `reset-password.mjs <ID_PROMOTOR>` | Genera y guarda una contraseña nueva para un promotor. |
