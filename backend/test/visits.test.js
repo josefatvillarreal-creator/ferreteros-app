@@ -2,6 +2,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { setupTestDb } from "../support/testDb.js";
 
+process.env.GOALS_ENABLED = "true";
 const testDb = setupTestDb();
 const { prisma } = await import("../src/prisma.js");
 const db = await import("../src/db.js");

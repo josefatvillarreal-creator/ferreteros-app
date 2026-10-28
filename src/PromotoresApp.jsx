@@ -438,6 +438,9 @@ export default function PromotoresApp() {
   // dependen de si el navegador puede ofrecer el instalado con un clic
   // (Chrome/Android) o si ya está instalada — ninguno de los otros pasos
   // depende de estado en vivo.
+  // Meta de ventas: { target, achieved, reached } | { enabled: false } (metas desactivadas) | null (cargando)
+  const [myGoal, setMyGoal] = useState(null);
+  const goalsOff = myGoal?.enabled === false;
   const onboardingStepsPromotor = useMemo(() => {
     const installStep = isStandalone
       ? {
@@ -457,12 +460,12 @@ export default function PromotoresApp() {
             title: "Agrégala a tu pantalla de inicio",
             body: "Abre el menú (⋮) de Chrome y elige \"Instalar app\" o \"Agregar a pantalla de inicio\". Así abre como una app aparte y usa menos memoria de tu teléfono.",
           };
-    return [...ONBOARDING_STEPS_PROMOTOR_BASE, installStep];
-  }, [canInstall, isStandalone, promptInstall]);
+    const base = goalsOff ? ONBOARDING_STEPS_PROMOTOR_BASE.filter((st) => st.title !== "Tu meta de ventas del mes") : ONBOARDING_STEPS_PROMOTOR_BASE;
+    return [...base, installStep];
+  }, [canInstall, isStandalone, promptInstall, goalsOff]);
 
   const [screen, setScreen] = useState("dashboard");
   const [records, setRecords] = useState({});
-  const [myGoal, setMyGoal] = useState(null); // { target, achieved, reached } | null
   const [myHistory, setMyHistory] = useState(null); // perfil completo (sucursales frecuentes, foto) | null
 
   // Mi historial de check-in/check-out (pantalla aparte, ver screen ===
@@ -1279,7 +1282,7 @@ export default function PromotoresApp() {
           <span style={{ fontSize: 11, letterSpacing: "0.1em", color: COLORS.textMuted, fontWeight: 600 }}>TU UBICACIÓN</span>
           <MapView coords={dashCoords} sucursales={allSucursales} />
 
-          <SalesGoals goal={myGoal} />
+          {!goalsOff && <SalesGoals goal={myGoal} />}
 
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <span style={{ fontSize: 11, letterSpacing: "0.1em", color: COLORS.textMuted, fontWeight: 600 }}>

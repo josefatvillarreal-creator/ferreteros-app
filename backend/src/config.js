@@ -21,6 +21,10 @@ export const config = {
   // hacia la base local, ver catalogSync.js).
   catalogSource: (process.env.CATALOG_SOURCE ?? "db").toLowerCase(),
 
+  // Metas de venta (barra de avance, botón "Meta", avisos de meta alcanzada).
+  // DESACTIVADAS por defecto "hasta nuevo aviso"; con GOALS_ENABLED=true vuelven.
+  goalsEnabled: String(process.env.GOALS_ENABLED ?? "false").toLowerCase() === "true",
+
   session: {
     secret: required("SESSION_SECRET", "insecure-dev-secret"),
     ttlSeconds: Number(process.env.SESSION_TTL_SECONDS ?? 28800),

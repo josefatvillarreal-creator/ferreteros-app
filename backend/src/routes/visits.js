@@ -27,13 +27,13 @@ router.get("/today", async (req, res) => {
   return res.json({ records: clean });
 });
 
-// GET /api/visits/my-goal -> { target, achieved, reached } | null
+// GET /api/visits/my-goal -> { target, achieved, reached } | { enabled: false } (metas desactivadas)
 // La meta mensual (unidades) del promotor logueado y su avance del mes,
 // siempre desde la base de datos real (sus propios check-outs).
 router.get("/my-goal", async (req, res) => {
   try {
     const goal = await getMyGoalProgress(req.promoter.id);
-    return res.json(goal);
+    return res.json(goal ?? { enabled: false });
   } catch (err) {
     console.error("[visits/my-goal]", err);
     return res.status(500).json({ message: "No se pudo cargar tu meta" });

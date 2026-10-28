@@ -5,6 +5,7 @@
 // Un promotor de campo que intente llamarlas recibe 403.
 import { Router } from "express";
 import { requireAuth, requireRole } from "../auth.js";
+import { config } from "../config.js";
 import { getManagerSummary, setPromoterGoal, getCompetitionReports, getCompetitionReportPhotos } from "../db.js";
 
 const router = Router();
@@ -35,6 +36,7 @@ router.get("/summary", async (req, res) => {
 // asignar metas (los supervisores solo las VEN en su tablero).
 router.put("/promoter/:id/goal", async (req, res) => {
   try {
+    if (!config.goalsEnabled) return res.status(409).json({ message: "Las metas de venta están desactivadas." });
     const meta = Number(req.body?.meta);
     if (!Number.isFinite(meta) || meta <= 0) {
       return res.status(400).json({ message: "La meta debe ser un número mayor a 0" });

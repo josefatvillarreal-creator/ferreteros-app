@@ -147,6 +147,7 @@ relevantes para entender el sistema:
 |---|---|
 | `AUTH_SOURCE` | `db` (Prisma) o `sheet` (login contra la pestaña Promotores/Usuarios del Sheet — lo normal en producción) |
 | `CATALOG_SOURCE` | `db` o `sheet` (sincroniza Clientes, Sucursales y Productos desde las pestañas del Sheet, ver "Carga gradual") |
+| `GOALS_ENABLED` | Metas de venta (barra de avance, botón "Meta", avisos de meta alcanzada). **Desactivadas por defecto "hasta nuevo aviso"**: sin la variable (o en `false`) las pantallas no muestran nada de metas y el backend no las calcula ni las notifica; `PUT /manager/promoter/:id/goal` responde 409. Con `true` vuelve todo como antes |
 | `DEV_USERS` | **Solo desarrollo local sin Sheet:** `id:rol:Nombre:contraseña` separados por `;` (admin/gerente/supervisor). Se ignora con `NODE_ENV=production` o con el Sheet configurado |
 | `GOOGLE_SHEETS_ID` + credenciales del Service Account | Documento de Google Sheets que actúa como fuente de datos |
 | `CHECK_IN_RADIUS_METERS` / `NEARBY_RADIUS_METERS` | Reglas de geolocalización del check-in |
@@ -236,6 +237,10 @@ DevTools → Sensors con las coordenadas de la sucursal. Pruebas del backend:
 `cd backend && npm test` (`node:test`, sin dependencias nuevas).
 
 ## Metas de venta
+
+> **Desactivadas "hasta nuevo aviso"** (variable `GOALS_ENABLED`, por defecto apagada).
+> Todo lo que sigue aplica cuando se vuelvan a activar con `GOALS_ENABLED=true`;
+> las ventas por producto, dinero y unidades se siguen mostrando igual.
 
 Semanales, en **unidades-equivalentes**: cada producto aporta cantidad × su
 `Equivalencia` (pestaña Productos; p. ej. Rollo = 1, Cubeta = 0.6, un producto con

@@ -45,7 +45,7 @@ const ONBOARDING_STEPS_SUPERVISOR = [
   {
     icon: Bell,
     title: "Notificaciones de tu equipo",
-    body: "La campana te avisa cuando uno de tus promotores hace check-in (con la sucursal y si llegó a tiempo) y cuando alcanza su meta de la semana.",
+    body: "La campana te avisa cuando uno de tus promotores hace check-in (con la sucursal y si llegó a tiempo).",
   },
   {
     icon: MapPin,
@@ -198,7 +198,7 @@ export default function SupervisorDashboard() {
     { key: "con", label: "Con ventas" },
     { key: "sin", label: "Sin ventas" },
     { key: "in", label: "En sucursal" },
-    { key: "meta", label: "Con meta alcanzada" },
+    ...(summary?.goalsEnabled === false ? [] : [{ key: "meta", label: "Con meta alcanzada" }]),
   ];
 
   const exportHeaders = useMemo(() => buildExportHeaders(products), [products]);
@@ -310,11 +310,13 @@ export default function SupervisorDashboard() {
           tooltip="Número de sucursales distintas visitadas por tu equipo en este período."
           onClick={() => setSegment("todos")}
         />
-        <Kpi
-          icon={AlertTriangle} label="Metas alcanzadas" value={fmtNum(metasAlcanzadas)} accent={metasAlcanzadas > 0}
-          tooltip="Promotores de tu equipo que ya llegaron a su meta semanal de unidades."
-          onClick={() => setSegment("meta")} active={segment === "meta"}
-        />
+        {summary?.goalsEnabled !== false && (
+          <Kpi
+            icon={AlertTriangle} label="Metas alcanzadas" value={fmtNum(metasAlcanzadas)} accent={metasAlcanzadas > 0}
+            tooltip="Promotores de tu equipo que ya llegaron a su meta semanal de unidades."
+            onClick={() => setSegment("meta")} active={segment === "meta"}
+          />
+        )}
         <Kpi
           icon={UserX} label="Faltan en sucursal" value={fmtNum(faltanEnSucursal)}
           tooltip="Promotores de tu equipo que AHORA MISMO no tienen un check-in abierto (sobre el total de tu equipo, no solo los activos en este período). Clic para ver quiénes son."
@@ -492,7 +494,12 @@ export default function SupervisorDashboard() {
       </div>
 
       {profileId && <PromoterProfile promoterId={profileId} onClose={() => setProfileId(null)} />}
-      {onboarding.open && <OnboardingTour steps={ONBOARDING_STEPS_SUPERVISOR} onClose={onboarding.dismiss} />}
+      {onboarding.open && (
+        <OnboardingTour
+          steps={summary?.goalsEnabled === false ? ONBOARDING_STEPS_SUPERVISOR.filter((st) => st.title !== "La meta de tu equipo") : ONBOARDING_STEPS_SUPERVISOR}
+          onClose={onboarding.dismiss}
+        />
+      )}
     </div>
   );
 }

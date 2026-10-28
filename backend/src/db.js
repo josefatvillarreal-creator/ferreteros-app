@@ -345,6 +345,11 @@ async function getRoster(supervisorId) {
 // no el default (DEFAULT_WEEKLY_GOAL_UNITS). El acumulado de la SEMANA sale de la
 // base de datos real e incluye productos desactivados (su historial cuenta).
 async function attachGoalProgress(summary) {
+  summary.goalsEnabled = config.goalsEnabled;
+  if (!config.goalsEnabled) {
+    for (const p of summary.promoters) p.goal = null;
+    return;
+  }
   const week = resolveRange("week");
   const [weekRows, catalog] = await Promise.all([
     prisma.visitRecord.findMany({
@@ -464,6 +469,7 @@ async function weekToDateUnits(where, week = resolveRange("week")) {
 // default) — lo consume su propia app ("Mi meta de ventas" en el dashboard
 // de campo).
 export async function getMyGoalProgress(promoterId) {
+  if (!config.goalsEnabled) return null;
   const target = (await getPromoterGoal(promoterId)) ?? DEFAULT_WEEKLY_GOAL_UNITS;
   const achieved = await weekToDateUnits({ promoterId });
   return { target, achieved, reached: achieved >= target };
@@ -474,6 +480,7 @@ export async function getMyGoalProgress(promoterId) {
 // gerente/admin, como EXCEPCIÓN al default (DEFAULT_WEEKLY_GOAL_UNITS).
 // `nombre` es solo para que la fila del Sheet sea legible a simple vista.
 export async function setPromoterGoal(promoterId, meta, nombre) {
+  if (!config.goalsEnabled) throw new Error("Las metas de venta están desactivadas.");
   await setPromoterGoalInSheet(promoterId, meta, nombre);
 }
 
@@ -483,6 +490,7 @@ export async function setPromoterGoal(promoterId, meta, nombre) {
 // del cruce). El promotor SIEMPRE tiene meta (personalizada o el default); la
 // sucursal solo si tiene una personalizada en el Sheet.
 export async function checkAndNotifyGoals(promoterId, sucursalId) {
+  if (!config.goalsEnabled) return;
   try {
     const week = resolveRange("week");
     const periodo = week.from; // "YYYY-MM-DD" del lunes de esa semana

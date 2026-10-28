@@ -55,7 +55,7 @@ const ONBOARDING_STEPS_ADMIN = [
   {
     icon: Bell,
     title: "Notificaciones",
-    body: "La campana te muestra el Top 5 de vendedores del día, si un promotor llegó a tiempo, y te avisa cuando una sucursal alcanza su meta semanal.",
+    body: "La campana te muestra el Top 5 de vendedores del día, y si un promotor llegó a tiempo.",
   },
   {
     icon: MapPin,
@@ -539,7 +539,7 @@ export default function ManagerDashboard() {
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {filtered.map((p) => (
-                    <PromoterRow key={p.id} p={p} onClick={(pp) => setProfileId(pp.id)} onEditGoal={setEditingGoalFor} hour12={false} products={products} />
+                    <PromoterRow key={p.id} p={p} onClick={(pp) => setProfileId(pp.id)} onEditGoal={summary?.goalsEnabled ? setEditingGoalFor : undefined} hour12={false} products={products} />
                   ))}
                 </div>
               )}
@@ -557,7 +557,12 @@ export default function ManagerDashboard() {
           onClose={() => setEditingGoalFor(null)}
         />
       )}
-      {onboarding.open && <OnboardingTour steps={ONBOARDING_STEPS_ADMIN} onClose={onboarding.dismiss} />}
+      {onboarding.open && (
+        <OnboardingTour
+          steps={summary?.goalsEnabled === false ? ONBOARDING_STEPS_ADMIN.filter((st) => st.title !== "Fija la meta de cada promotor") : ONBOARDING_STEPS_ADMIN}
+          onClose={onboarding.dismiss}
+        />
+      )}
     </div>
   );
 }

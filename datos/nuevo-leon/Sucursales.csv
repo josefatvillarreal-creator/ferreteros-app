@@ -1,0 +1,11 @@
+﻿Num,ClienteID,Sucursal,Dirección,Latitud,Longitud,Estado
+NL01-M,nl01,Matriz,"Fruilla 324, Col. Mirasol, Monterrey",,,Nuevo León
+NL02-M,nl02,Matriz,"Av. Fidel Velázquez 1111, Col. Constituyentes del 57, Monterrey",,,Nuevo León
+NL03-M,nl03,Matriz,"Av. Prolongación Ruiz Cortines 4407, Monterrey",,,Nuevo León
+NL04-M,nl04,Matriz,"Av. Penitenciaría 2301, Col. Ferrocarrilera, Monterrey",,,Nuevo León
+NL05-M,nl05,Matriz,"Av. Raúl Salinas 527, Col. Nueva California, Monterrey",,,Nuevo León
+NL06-M,nl06,Matriz,"Privada La Puerta 1110, Parque Industrial Santa Catarina",,,Nuevo León
+NL07-M,nl07,Matriz,"Virgilio C. Guerra 128, La Fama, Santa Catarina",,,Nuevo León
+NL08-M,nl08,Matriz,"16 de Septiembre 1029, Col. La Independencia, Monterrey",,,Nuevo León
+NL09-M,nl09,Matriz,"Enrique C. Livas 403, Cumbres, Monterrey",,,Nuevo León
+NL10-M,nl10,Matriz,"Aarón Sáenz, Av. Insurgentes, Col. Santa María, Monterrey (sin número)",,,Nuevo León
