@@ -33,6 +33,7 @@ model Cliente {
   id         String     @id
   nombre     String
   estado     String? // ESTADO de México del cliente (opcional)
+  material   String? // Material que vende el distribuidor (texto libre, columna Material de Clientes); se muestra en la ventana de la sucursal
   sucursales Sucursal[]
 }
 

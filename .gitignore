@@ -34,3 +34,4 @@ backend/prisma/schema.local.prisma
 # Datos reales por estado (solo Clientes/Sucursales/Productos se versionan). La verificación trae contactos: no va a git.
 !datos/**/*.csv
 datos/**/Verificacion-*.csv
+datos/**/Promotores-*.tsv

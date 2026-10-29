@@ -132,3 +132,15 @@ test("una pestaña de sucursales con solo encabezado no desactiva el catálogo e
   await syncCatalog({ clientes: CLIENTES, productos: PRODUCTOS, sucursales: [SUC_HEADER] });
   assert.equal((await getSucursal("3001")).activa, true);
 });
+
+test("el Material del cliente se guarda y sale en las sucursales como clienteMaterial", async () => {
+  await prisma.sucursal.deleteMany();
+  await syncCatalog({
+    clientes: [["ID", "Cliente", "Estado", "Material"], ["c1", "Ferretería Demo", "Michoacán", "Green Max 19 L; Novaply"]],
+    productos: PRODUCTOS,
+    sucursales: [SUC_HEADER, ["4001", "c1", "Matriz", "", "19.7", "-101.1", ""]],
+  });
+  const [s] = await getAllSucursales();
+  assert.equal(s.clienteMaterial, "Green Max 19 L; Novaply");
+  assert.equal((await getSucursal("4001")).clienteMaterial, "Green Max 19 L; Novaply");
+});

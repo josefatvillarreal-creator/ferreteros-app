@@ -33,7 +33,7 @@ export async function findPromoterById(promoterId) {
 
 // Aplana una sucursal con el nombre de su cliente.
 function flattenSucursal({ cliente, ...s }) {
-  return { ...s, clienteNombre: cliente?.nombre ?? s.clienteId };
+  return { ...s, clienteNombre: cliente?.nombre ?? s.clienteId, clienteMaterial: cliente?.material ?? null };
 }
 
 // Todas las sucursales del catálogo. El filtrado por cercanía se hace en la ruta.

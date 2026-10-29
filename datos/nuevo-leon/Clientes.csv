@@ -1,11 +1,11 @@
-﻿ID,Cliente,Estado
-nl01,Distribuciones Famosa,Nuevo León
-nl02,Bodega Industrial,Nuevo León
-nl03,Isotermika,Nuevo León
-nl04,Ferretería Guevara,Nuevo León
-nl05,Ferretería San Martín,Nuevo León
-nl06,Proveedora Industrial,Nuevo León
-nl07,Fama Tecnology,Nuevo León
-nl08,Promer Plus,Nuevo León
-nl09,Juan Ernesto Sandoval,Nuevo León
-nl10,Materiales Jerez,Nuevo León
+﻿ID,Cliente,Estado,Material
+nl01,Distribuciones Famosa,Nuevo León,Green Max 5 años 19 L
+nl02,Bodega Industrial,Nuevo León,Secado Rápido (cubeta y galón)
+nl03,Isotermika,Nuevo León,"Green Max Cubetón; Rollos Novaply; Novaroll"
+nl04,Ferretería Guevara,Nuevo León,Green Max 19 L
+nl05,Ferretería San Martín,Nuevo León,Green Max 19 L
+nl06,Proveedora Industrial,Nuevo León,"Green Max 19 L; Secado Rápido (cubeta y galón)"
+nl07,Fama Tecnology,Nuevo León,"Green Max 19 L; Secado Rápido (cubeta y galón)"
+nl08,Promer Plus,Nuevo León,Secado Rápido (cubeta y galón)
+nl09,Juan Ernesto Sandoval,Nuevo León,"Green Max Cubetón; Diablo Fácil ASB (cubeta y galón)"
+nl10,Materiales Jerez,Nuevo León,"Green Max 19 L; Secado Rápido (cubeta y galón)"

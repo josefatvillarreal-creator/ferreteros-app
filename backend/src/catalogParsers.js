@@ -40,6 +40,7 @@ export function parseClientes(rows) {
     id: ["id"],
     nombre: ["cliente", "nombre"],
     estado: ["estado", "entidad"],
+    material: ["material", "material que vende"],
   });
   const items = [];
   const skipped = [];
@@ -53,7 +54,7 @@ export function parseClientes(rows) {
     if (!nombre) { skipped.push({ row: r + 1, reason: "sin nombre de cliente" }); continue; }
     if (seen.has(id)) { skipped.push({ row: r + 1, reason: `ID duplicado (${id})` }); continue; }
     seen.add(id);
-    items.push({ id, nombre, estado: cell(cells, index.estado) || null });
+    items.push({ id, nombre, estado: cell(cells, index.estado) || null, material: cell(cells, index.material) || null });
   }
   return { items, skipped };
 }

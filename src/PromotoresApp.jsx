@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { LogOut, MapPin, ArrowLeft, Check, Minus, Plus, Navigation, AlertTriangle, Clock, WifiOff, RefreshCw, Camera, User, Lock, MessageSquare, Send, X, Home, BarChart3, GraduationCap, LifeBuoy, ImagePlus, Trophy, Zap, HelpCircle, Eye, EyeOff, KeyRound, Heart, HardDrive, Download, ChevronRight, ChevronLeft, Ticket } from "lucide-react";
+import { LogOut, MapPin, ArrowLeft, Check, Minus, Plus, Navigation, AlertTriangle, Clock, WifiOff, RefreshCw, Camera, User, Lock, MessageSquare, Send, X, Home, BarChart3, GraduationCap, LifeBuoy, ImagePlus, Trophy, Zap, HelpCircle, Eye, EyeOff, KeyRound, Heart, HardDrive, Download, ChevronRight, ChevronLeft, Ticket, Info } from "lucide-react";
 import { useAuth } from "./auth/AuthProvider.jsx";
 import { api, ApiError } from "./lib/api.js";
 import { RANGE_METERS } from "./config.js";
@@ -525,6 +525,7 @@ export default function PromotoresApp() {
     try { return JSON.parse(localStorage.getItem("productos_cache") || "[]"); } catch { return []; }
   });
   const [productosError, setProductosError] = useState(false);
+  const [materialFor, setMaterialFor] = useState(null); // sucursal cuya ventana "Material que vende" está abierta
   const [cantidades, setCantidades] = useState({}); // { [productoId]: cantidad } del check-out en curso
   const [photo, setPhoto] = useState(null); // foto de check-in (Base64), obligatoria
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -1335,12 +1336,22 @@ export default function PromotoresApp() {
                       <span style={{ fontSize: 11, color: COLORS.textMuted, fontFamily: "JetBrains Mono" }}>{fmtDistance(s.distance)}</span>
                     )}
                     <StatusPill status={status2} />
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => { e.stopPropagation(); setMaterialFor(s); }}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); e.preventDefault(); setMaterialFor(s); } }}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, color: COLORS.accentText, border: `1px solid ${COLORS.border}`, borderRadius: 999, padding: "3px 8px", cursor: "pointer" }}
+                    >
+                      <Info size={12} /> Material
+                    </span>
                   </div>
                 </button>
               );
             })}
           </div>
         </div>
+        {materialFor && <MaterialModal sucursal={materialFor} onClose={() => setMaterialFor(null)} />}
         <FooterNav current="dashboard" onNavigate={goTab} />
       </div>
     );
@@ -1363,6 +1374,12 @@ export default function PromotoresApp() {
 
           <h2 style={{ fontFamily: "Space Grotesk", fontSize: 20, fontWeight: 600, color: COLORS.text, margin: "0 0 2px" }}>{sucursal.clienteNombre ? `${sucursal.clienteNombre} – ` : ""}{sucursal.name}</h2>
           <p style={{ fontSize: 12.5, color: COLORS.textMuted, margin: "0 0 22px" }}>{sucursal.address}</p>
+          <button
+            onClick={() => setMaterialFor(sucursal)}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, margin: "0 0 18px", padding: "7px 12px", borderRadius: 999, border: `1px solid ${COLORS.border}`, background: COLORS.surface2, color: COLORS.accentText, fontFamily: "Inter", fontWeight: 600, fontSize: 12.5, cursor: "pointer" }}
+          >
+            <Info size={14} /> Material que vende
+          </button>
 
           {!isDone && (
             <>
@@ -1505,6 +1522,8 @@ export default function PromotoresApp() {
             </div>
           )}
         </div>
+
+        {materialFor && <MaterialModal sucursal={materialFor} onClose={() => setMaterialFor(null)} />}
 
         {showSheet && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(5,8,12,0.6)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 50 }}>
@@ -1860,6 +1879,47 @@ export default function PromotoresApp() {
 
 // Wordmark de marca. PROVISIONAL: cuando llegue el logo oficial de Protexa
 // (SVG/PNG positivo y negativo) se reemplaza SOLO aquí por un <img>.
+// Ventana con el material que vende el distribuidor (columna Material de la pestaña Clientes;
+// varios productos separados por ";" o por saltos de línea).
+function MaterialModal({ sucursal, onClose }) {
+  const items = String(sucursal.clienteMaterial || "").split(/;|\n/).map((t) => t.trim()).filter(Boolean);
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(5,8,12,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 60 }}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Material que vende"
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: "100%", maxWidth: 420, maxHeight: "85vh", overflowY: "auto", background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 20 }}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
+          <div style={{ minWidth: 0 }}>
+            <h3 style={{ fontFamily: "Space Grotesk", fontSize: 17, fontWeight: 600, color: COLORS.text, margin: 0 }}>{sucursal.clienteNombre}</h3>
+            <p style={{ fontSize: 12.5, color: COLORS.textMuted, margin: "3px 0 0" }}>{sucursal.name}{sucursal.address ? ` · ${sucursal.address}` : ""}</p>
+          </div>
+          <button onClick={onClose} aria-label="Cerrar" style={{ background: "none", border: "none", color: COLORS.textMuted, cursor: "pointer", padding: 2, display: "flex" }}>
+            <X size={18} />
+          </button>
+        </div>
+        <p style={{ fontSize: 11, letterSpacing: "0.1em", color: COLORS.textMuted, fontWeight: 600, margin: "16px 0 8px" }}>MATERIAL QUE VENDE</p>
+        {items.length > 0 ? (
+          <ul style={{ margin: 0, paddingLeft: 18, color: COLORS.text, fontSize: 14, lineHeight: 1.7 }}>
+            {items.map((t, i) => <li key={i}>{t}</li>)}
+          </ul>
+        ) : (
+          <p style={{ fontSize: 13, color: COLORS.textMuted, margin: 0 }}>Aún no hay material registrado para este distribuidor.</p>
+        )}
+        <button
+          onClick={onClose}
+          style={{ width: "100%", marginTop: 18, padding: "11px 0", borderRadius: 10, border: `1px solid ${COLORS.border}`, background: COLORS.surface2, color: COLORS.text, fontFamily: "Inter", fontWeight: 600, fontSize: 14, cursor: "pointer" }}
+        >
+          Cerrar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Brand() {
   // Logo oficial Protexa. El navegador elige la versión según el tema del
   // dispositivo: blanca en modo oscuro, negra en modo claro.

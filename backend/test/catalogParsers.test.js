@@ -125,9 +125,26 @@ test("parseClientes deja Estado vacío como null y omite ID duplicado", () => {
     ["c2", "Otra", "Jalisco"],
   ]);
   assert.deepEqual(items, [
-    { id: "c1", nombre: "Ferretería Demo", estado: null },
-    { id: "c2", nombre: "Otra", estado: "Jalisco" },
+    { id: "c1", nombre: "Ferretería Demo", estado: null, material: null },
+    { id: "c2", nombre: "Otra", estado: "Jalisco", material: null },
   ]);
   assert.equal(skipped.length, 1);
   assert.match(skipped[0].reason, /duplicad/);
+});
+
+test("parseClientes lee la columna Material (texto libre) y la deja null si está vacía o no existe", () => {
+  const con = parseClientes([
+    ["ID", "Cliente", "Estado", "Material"],
+    ["c1", "Uno", "", "Green Max 19 L; Secado Rápido (cubeta y galón)"],
+    ["c2", "Dos", "", ""],
+  ]);
+  assert.equal(con.items[0].material, "Green Max 19 L; Secado Rápido (cubeta y galón)");
+  assert.equal(con.items[1].material, null);
+  const sin = parseClientes([["ID", "Cliente"], ["c1", "Uno"]]);
+  assert.equal(sin.items[0].material, null);
+});
+
+test("parseClientes acepta el encabezado 'Material que vende'", () => {
+  const r = parseClientes([["ID", "Cliente", "Material que vende"], ["c1", "Uno", "Novaply"]]);
+  assert.equal(r.items[0].material, "Novaply");
 });

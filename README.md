@@ -159,7 +159,7 @@ Todo vive en **un solo documento** ("BBDD Promotores"), con estas pestañas:
 | Pestaña | Para qué | Quién la lee/escribe |
 |---|---|---|
 | **Promotores** | ID, nombre, ubicación, supervisor, **estado** (uno de los 32 estados de México, fijo por promotor — alimenta el filtro de estado del gerente), contraseña (hash) de cada promotor | Login de promotores (`promotersSheet.js`); todos los tableros leen aquí el nombre de supervisor y el estado de cada promotor |
-| **Clientes** | ID, Cliente, Estado (opcional) | `catalogSync.js`, con `CATALOG_SOURCE=sheet` |
+| **Clientes** | ID, Cliente, Estado (opcional), **Material** (opcional: lo que vende el distribuidor, varios separados por `;`; el promotor lo ve en la ventana "Material que vende" de cada sucursal) | `catalogSync.js`, con `CATALOG_SOURCE=sheet` |
 | **Sucursales** | Num, ClienteID, Sucursal, Dirección, Latitud, Longitud, Estado — catálogo global de sucursales de cada cliente | `catalogSync.js` (ver "Carga gradual") |
 | **Productos** | ID, Producto, Unidad, Equivalencia (peso en la meta), Precio, Activo (SI/NO) | `catalogSync.js`; `Activo = NO` lo oculta del formulario pero conserva su historial |
 | **Usuarios** | ID, nombre, rol (`admin`\|`gerente`\|`supervisor`), contraseña (hash) | Login de administración (`usersSheet.js`) — **nunca** promotores de campo |
