@@ -38,6 +38,7 @@ ENV PORT=8080
 EXPOSE 8080
 
 # Crea/actualiza las tablas directamente desde el esquema (no usamos archivos de
-# migración) y arranca. Con AUTH_SOURCE=sheet y CATALOG_SOURCE=sheet los datos
+# migración) y arranca. SIN --accept-data-loss a propósito: si DATABASE_URL apunta a una
+# base que ya tiene tablas de OTRA app, prisma se detiene en lugar de borrarlas. Con AUTH_SOURCE=sheet y CATALOG_SOURCE=sheet los datos
 # vienen del Google Sheet en runtime, así que no se siembra desde CSV aquí.
-CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss && node src/server.js"]
+CMD ["sh", "-c", "npx prisma db push --skip-generate && node src/server.js"]
