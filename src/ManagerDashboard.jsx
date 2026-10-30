@@ -24,7 +24,7 @@ import { api, ApiError } from "./lib/api.js";
 import { COLORS, detectScheme, applyScheme } from "./theme.js";
 import {
   fmtMoney, fmtMoneyCompact, fmtNum, todayStamp, RANGE_OPTIONS, RANGE_LABELS, MEXICO_ESTADOS,
-  bgTexture, Brand, NationalMap, BarChart, Kpi, ChartCard, PromoterRow, PanelHeader, EditGoalModal,
+  bgTexture, Brand, NationalMap, BarChart, Kpi, ChartCard, PromoterRow, PanelHeader, EditGoalModal, SucursalesModal,
   buildExportHeaders, buildExportRows, downloadCsv, downloadXlsx, pieceCount,
 } from "./dashboardShared.jsx";
 import NotificationBell from "./NotificationBell.jsx";
@@ -94,6 +94,10 @@ export default function ManagerDashboard() {
   const [profileId, setProfileId] = useState(null);
   const [editingGoalFor, setEditingGoalFor] = useState(null); // promotor u null
   const [savingGoal, setSavingGoal] = useState(false);
+  // Ventana "Sucursales de los ferreteros" (KPI Sucursales): catálogo completo, se pide al abrirla.
+  const [showSucursales, setShowSucursales] = useState(false);
+  const [sucursalesCat, setSucursalesCat] = useState(null);
+  const [sucursalesError, setSucursalesError] = useState("");
 
   // Estado del panel: open | collapsed | max
   const [panelMode, setPanelMode] = useState("open");
@@ -141,6 +145,17 @@ export default function ManagerDashboard() {
     load(ctrl.signal);
     return () => ctrl.abort();
   }, [load]);
+
+  useEffect(() => {
+    if (!showSucursales) return;
+    const ctrl = new AbortController();
+    setSucursalesError("");
+    api
+      .allSucursales(ctrl.signal)
+      .then((d) => setSucursalesCat(d?.sucursales ?? []))
+      .catch((e) => { if (e?.name !== "AbortError") setSucursalesError(e instanceof ApiError ? e.message : "No se pudieron cargar las sucursales."); });
+    return () => ctrl.abort();
+  }, [showSucursales]);
 
   async function saveGoal(meta) {
     if (!editingGoalFor) return;
@@ -338,14 +353,6 @@ export default function ManagerDashboard() {
           tooltip={`${fmtMoney(totals.money)} · suma en dinero de todas las ventas de todos los productos registradas en este período.`}
           onClick={() => setSegment("con")} active={segment === "con"}
         />
-        {products.map((pr) => (
-          <Kpi
-            key={pr.id}
-            icon={TrendingUp} label={pr.nombre} value={fmtNum(totals.byProduct?.[pr.id] || 0)}
-            tooltip={`Total de ${pr.nombre} vendido en este período. Clic para filtrar el mapa y las gráficas a quien vendió ${pr.nombre} — puedes combinarlo con otros productos.`}
-            onClick={() => toggleUnit(pr.id)} active={unitFilter.has(pr.id)}
-          />
-        ))}
         <Kpi
           icon={Users} label="Activos" value={fmtNum(totals.promoters)}
           tooltip="Promotores con al menos una visita registrada en este período."
@@ -358,8 +365,8 @@ export default function ManagerDashboard() {
         />
         <Kpi
           icon={Store} label="Sucursales" value={fmtNum(totals.sucursalesVisited)}
-          tooltip="Número de sucursales distintas visitadas en este período."
-          onClick={() => setSegment("todos")}
+          tooltip="Sucursales visitadas en este período. Clic para ver las sucursales de los ferreteros."
+          onClick={() => setShowSucursales(true)} active={showSucursales}
         />
         <Kpi
           icon={AlertTriangle} label="Sin ventas" value={fmtNum(totals.withoutSales)}
@@ -548,6 +555,15 @@ export default function ManagerDashboard() {
         </div>
       </div>
 
+      {showSucursales && (
+        <SucursalesModal
+          sucursales={sucursalesCat}
+          loading={sucursalesCat === null && !sucursalesError}
+          error={sucursalesError}
+          visitedIds={new Set(promoters.flatMap((p) => (p.visits ?? []).map((v) => v.sucursalId)))}
+          onClose={() => setShowSucursales(false)}
+        />
+      )}
       {profileId && <PromoterProfile promoterId={profileId} onClose={() => setProfileId(null)} hour12={false} />}
       {editingGoalFor && (
         <EditGoalModal

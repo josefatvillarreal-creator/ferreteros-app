@@ -4,7 +4,7 @@
 // fila de promotor, exportación CSV/Excel. Evita duplicar el mapa de Leaflet
 // y las gráficas SVG entre ambos tableros.
 import { useState, useEffect, useRef } from "react";
-import { MapPin, Maximize2, Minimize2, ChevronUp, ChevronDown, ChevronLeft, Target } from "lucide-react";
+import { MapPin, Maximize2, Minimize2, ChevronUp, ChevronDown, ChevronLeft, Target, X, Search } from "lucide-react";
 import { COLORS } from "./theme.js";
 import { useLeaflet } from "./lib/useLeaflet.js";
 import { attachBaseMap } from "./lib/mapTiles.js";
@@ -327,6 +327,85 @@ export function PromoterRow({ p, onClick, onEditGoal, hour12 = true, products = 
     </div>
   );
 }
+// Ventana con las sucursales de los ferreteros (catálogo completo), agrupadas por cliente.
+// `visitedIds` = Set de ids de sucursal con visitas en el período que se está viendo.
+export function SucursalesModal({ sucursales, loading, error, visitedIds, onClose }) {
+  const [q, setQ] = useState("");
+  const term = q.trim().toLowerCase();
+  const filtered = (sucursales ?? []).filter((s) =>
+    !term || [s.clienteNombre, s.name, s.address, s.estado, s.id].some((v) => String(v ?? "").toLowerCase().includes(term))
+  );
+  const groups = new Map();
+  for (const s of filtered) {
+    const key = s.clienteId ?? "sin-cliente";
+    if (!groups.has(key)) groups.set(key, { cliente: s.clienteNombre || "Sin cliente", material: s.clienteMaterial, items: [] });
+    groups.get(key).items.push(s);
+  }
+  const list = [...groups.values()].sort((a, b) => a.cliente.localeCompare(b.cliente, "es"));
+  const total = sucursales?.length ?? 0;
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Sucursales de los ferreteros"
+        onClick={(e) => e.stopPropagation()}
+        style={{ background: COLORS.surface, borderRadius: 16, width: "min(560px, 100%)", maxHeight: "86vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "16px 18px 10px" }}>
+          <MapPin size={16} color={COLORS.accentText} />
+          <span style={{ fontSize: 15, fontWeight: 700, color: COLORS.text }}>Sucursales de los ferreteros</span>
+          <span style={{ fontSize: 12, color: COLORS.textMuted }}>{total}</span>
+          <button onClick={onClose} aria-label="Cerrar" style={{ marginLeft: "auto", background: "none", border: "none", color: COLORS.textMuted, cursor: "pointer", display: "flex", padding: 2 }}>
+            <X size={18} />
+          </button>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 18px 10px", background: COLORS.surface2, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "8px 10px" }}>
+          <Search size={15} color={COLORS.textMuted} />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar cliente, sucursal o dirección"
+            style={{ background: "transparent", border: "none", outline: "none", color: COLORS.text, fontSize: 13.5, width: "100%" }}
+          />
+        </div>
+        <div style={{ overflowY: "auto", padding: "0 18px 18px" }}>
+          {loading ? (
+            <p style={{ color: COLORS.textMuted, fontSize: 13 }}>Cargando sucursales…</p>
+          ) : error ? (
+            <p style={{ color: COLORS.danger, fontSize: 13 }}>{error}</p>
+          ) : list.length === 0 ? (
+            <p style={{ color: COLORS.textMuted, fontSize: 13 }}>{total === 0 ? "Aún no hay sucursales cargadas." : "Ninguna sucursal coincide con la búsqueda."}</p>
+          ) : (
+            list.map((g) => (
+              <div key={g.cliente} style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: COLORS.text }}>{g.cliente}</div>
+                {g.material && <div style={{ fontSize: 11.5, color: COLORS.textMuted, margin: "1px 0 4px" }}>Vende: {String(g.material).split(/;|\n/).map((t) => t.trim()).filter(Boolean).join(" · ")}</div>}
+                {g.items.map((s) => (
+                  <div key={s.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, background: COLORS.surface2, borderRadius: 10, padding: "8px 10px", marginTop: 6 }}>
+                    <MapPin size={14} color={visitedIds?.has(s.id) ? COLORS.success : COLORS.textMuted} style={{ flexShrink: 0, marginTop: 2 }} />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>{s.name} <span style={{ color: COLORS.textMuted, fontWeight: 400, fontFamily: "JetBrains Mono", fontSize: 11 }}>#{s.id}</span></div>
+                      {(s.address || s.estado) && <div style={{ fontSize: 12, color: COLORS.textMuted }}>{[s.address, s.estado].filter(Boolean).join(" · ")}</div>}
+                      <div style={{ fontSize: 11.5, marginTop: 2 }}>
+                        {visitedIds?.has(s.id) && <span style={{ color: COLORS.success, fontWeight: 600, marginRight: 10 }}>Visitada en este período</span>}
+                        {typeof s.lat === "number" && typeof s.lng === "number" && (
+                          <a href={`https://www.google.com/maps?q=${s.lat},${s.lng}`} target="_blank" rel="noreferrer" style={{ color: COLORS.accentText }}>Ver en el mapa</a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Modal para fijar la meta SEMANAL personalizada (en unidades equivalentes)
 // de un promotor, como excepción al default de 30/semana. Solo lo abre
 // el tablero de admin/gerente (ver el botón "Meta" en PromoterRow).
