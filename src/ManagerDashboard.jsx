@@ -546,7 +546,7 @@ export default function ManagerDashboard() {
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {filtered.map((p) => (
-                    <PromoterRow key={p.id} p={p} onClick={(pp) => setProfileId(pp.id)} onEditGoal={summary?.goalsEnabled ? setEditingGoalFor : undefined} hour12={false} products={products} />
+                    <PromoterRow key={p.id} p={p} onClick={(pp) => setProfileId(pp.id)} onEditGoal={summary?.goalsEnabled ? setEditingGoalFor : undefined} hour12={false} />
                   ))}
                 </div>
               )}
